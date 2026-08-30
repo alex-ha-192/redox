@@ -1,9 +1,13 @@
-mod token_def;
+mod ast;
+mod lexer;
+mod tokens;
 
 use clap::Parser;
-use logos::Logos;
+use lalrpop_util::lalrpop_mod;
+use lexer::Lexer;
 use std::fs;
-use token_def::Token;
+
+lalrpop_mod!(grammar);
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -24,14 +28,9 @@ fn main() {
         Err(e) => panic!("Error when reading source file: {:?}", e),
     };
 
-    let mut tokens = vec![];
-
-    for result in Token::lexer(&src) {
-        match result {
-            Ok(token) => tokens.push(token),
-            Err(e) => panic!("Lexing error: {:?}", e),
-        }
-    }
+    let lexer = Lexer::new(&src);
+    let parser = grammar::ProgramParser::new();
+    let ast = parser.parse(lexer)?;
 
     // Add parsing
 }

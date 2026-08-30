@@ -1,4 +1,5 @@
 use logos::Logos;
+use std::fmt;
 
 #[derive(Logos, Debug, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")] // Ignore this regex pattern between tokens
@@ -106,6 +107,12 @@ pub enum Token {
         s.chars().nth(1).unwrap()
     })]
     CharacterLiteral(char),
-    #[regex(r"True|False", |lex| lex.slice().to_string())]
-    BooleanLiteral(String),
+    #[regex(r"True|False", |lex| if lex.slice().to_string() == "True" { true } else { false })]
+    BooleanLiteral(bool),
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

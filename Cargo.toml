@@ -3,6 +3,10 @@ name = "redox"
 version = "0.1.0"
 edition = "2024"
 
+[build-dependencies]
+lalrpop = { version = "0.23.1", default-features = false }
+
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
+lalrpop-util = { version = "0.23.1", default-features = false }
 logos = "0.16.1"
