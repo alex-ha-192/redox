@@ -1,0 +1,3 @@
+Create Integer my_integer with value 5
+Set my_integer to my_integer + 5
+Display my_integer

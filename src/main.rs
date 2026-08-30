@@ -14,7 +14,7 @@ struct Args {
 
 fn main() {
     println!(
-        "Redox Copyright (C) 2026 Alex Hegedus-Adkin\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.\nFor more details, see the LICENCE file at https://github.com/alex-ha-192/redox/."
+        "Redox Copyright (C) 2026 Alex Hegedus-Adkin\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.\nFor more details, see the LICENCE file at https://github.com/alex-ha-192/redox/.\n"
     );
 
     let args = Args::parse();
@@ -33,5 +33,5 @@ fn main() {
         }
     }
 
-    todo!("Add parsing to build AST from tokens");
+    // Add parsing
 }
