@@ -32,5 +32,7 @@ fn main() {
     let parser = grammar::ProgramParser::new();
     let _ast = parser.parse(lexer);
 
+    println!("{:?}", _ast);
+
     // Add parsing
 }

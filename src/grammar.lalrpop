@@ -53,7 +53,8 @@ extern {
     "Identifier" => Token::Identifier(<String>),
     "TextLiteral" => Token::TextLiteral(<String>),
     "CharacterLiteral" => Token::CharacterLiteral(<char>),
-    "BooleanLiteral" => Token::BooleanLiteral(<bool>)
+    "BooleanLiteral" => Token::BooleanLiteral(<bool>),
+    "ListLiteral" => Token::ListLiteral(<List<T>>),
   }
 }
 
@@ -65,14 +66,14 @@ pub Program: Vec<ast::Statement> = {
 };
 
 pub Statement: ast::Statement = {
-  "Create" <var_type:Type> <name:"Identifier"> => {
+  "Create" <var_type:FullType> <name:"Identifier"> => {
     ast::Statement::Create {
       identifier: name,
       var_type,
       value: Box::new(None),
     }
   },
-  "Create" <var_type:Type> <name:"Identifier"> "with" "value" <value:Expression> => {
+  "Create" <var_type:FullType> <name:"Identifier"> "with" "value" <value:Expression> => {
     ast::Statement::Create {
       identifier: name,
       var_type,
@@ -226,7 +227,6 @@ pub Factor: Box<ast::Expression> = {
   },
 };
 
-// TODO: Term
 pub Term: Box<ast::Expression> = {
   <val:"IntegerLiteral"> => {
     Box::new(ast::Expression::IntegerLiteral(val))
@@ -240,7 +240,27 @@ pub Term: Box<ast::Expression> = {
   <name:"Identifier"> => {
     Box::new(ast::Expression::Identifier(name))
   },
+  <val:"ListLiteral"> => {
+    Box::new(ast::Expression::ListLiteral(val))
+  },
   "(" <Expression> ")",
+};
+
+pub ListLiteral: ast::ListLiteral
+
+pub FullType: ast::FullType = {
+  <maintype:Type> => {
+    ast::FullType {
+      main: maintype,
+      subtype: None
+    }
+  },
+  <maintype:Type> "<" <subtype:FullType> ">" => {
+    ast::FullType {
+      main: maintype,
+      subtype: Some(Box::new(subtype))
+    }
+  },
 };
 
 pub Type: ast::Type = {

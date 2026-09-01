@@ -1,0 +1,3 @@
+Create List<Integer> my_list with value [0, 1, 2, 3]
+Display my_list[0]
+Display "my_list[0] should be 0"

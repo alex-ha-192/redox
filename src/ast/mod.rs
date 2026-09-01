@@ -12,6 +12,12 @@ pub enum Type {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct FullType {
+    pub main: Type,
+    pub subtype: Option<Box<FullType>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operator {
     Add,
     Sub,
@@ -31,7 +37,7 @@ pub enum Operator {
 pub enum Statement {
     Create {
         identifier: String,
-        var_type: Type,
+        var_type: FullType,
         value: Box<Option<Expression>>,
     },
     Set {
@@ -59,7 +65,10 @@ pub enum Expression {
     IntegerLiteral(i64),
     RealLiteral(f64),
     TextLiteral(String),
-    ListLiteral(Vec<Box<Expression>>), // TODO: Handle ListLiteral in grammar/lexer?
+    ListLiteral {
+        first: Option<Box<Expression>>, // Empty literal
+        next: Option<Box<Expression>>,
+    },
     BinaryOperation {
         lhs: Box<Expression>,
         operator: Operator,
