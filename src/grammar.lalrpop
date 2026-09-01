@@ -11,7 +11,7 @@ extern {
   enum Token {
     "Create" => Token::Create,
     "Set" => Token::Set,
-    "Display" => Token::Display
+    "Display" => Token::Display,
     "with" => Token::With,
     "value" => Token::Value,
     "takes" => Token::Takes,
@@ -70,14 +70,31 @@ pub Script: Vec<ast::Statement> = {
 }
 
 pub Statement: ast::Statement = {
-  "var" <name:"identifier"> "=" <value:Expression> ";" => {
-    ast::Statement::Variable { name, value }
+  "Create" <var_type:Type> <name:"identifier"> => {
+    ast::Statement::Create { name, var_type, None }
   },
-  "print" <value:Expression> ";" => {
-    ast::Statement::Print { value }
+  "Create" <var_type:Type> <name:"identifier"> "with" "value" <value:Expression> => {
+    ast::Statement::Create { name, var_type, Some(value) }
   },
+  "Display" <value:Expression> => {
+    ast::Statement::Display { value }
+  },
+  "If" <cond:Expression> "{" <then:Vec<ast::Statement>> "}" => {
+    ast::Statement::If { cond, then, None }
+  },
+  "If" <cond:Expression> "{" <then:Vec<ast::Statement>> "}" "otherwise" "{" <otherwise:Vec<ast::Statement>> "}" => {
+    ast::Statement::If { cond, then, otherwise }
+  },
+  "While" <cond:Expression> "is" <proceed:"BooleanLiteral"> "{" <then:Vec<ast::Statement>> "}" => {
+    ast::Statement::While { cond, proceed, then }
+  },
+  "While" <cond:Expression> "{" <then:Vec<ast::Statement>> "}" => {
+    ast::Statement::While { cond, true, then }
+  }
 }
 
+
+// TODO: Expressions
 pub Expression: Box<ast::Expression> = {
   #[precedence(level="1")]
   Term,
@@ -115,6 +132,7 @@ pub Expression: Box<ast::Expression> = {
   },
 }
 
+// TODO: Term
 pub Term: Box<ast::Expression> = {
   <val:"int"> => {
     Box::new(ast::Expression::Integer(val))
@@ -124,3 +142,13 @@ pub Term: Box<ast::Expression> = {
   },
   "(" <Expression> ")",
 }
+
+pub Type: ast::Type = {
+    "Integer" => ast::Type::Integer,
+    "Real" => ast::Type::Real,
+    "Character" => ast::Type::Character,
+    "Text" => ast::Type::Text,
+    "Boolean" => ast::Type::Boolean,
+    "List" => ast::Type::List,
+    "Nothing" => ast::Type::Nothing,
+};

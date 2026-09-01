@@ -28,7 +28,7 @@ pub enum Statement {
     Create {
         identifier: String,
         var_type: Type,
-        value: Box<Expression>,
+        value: Box<Option<Expression>>,
     },
     Set {
         identifier: String,
@@ -39,15 +39,13 @@ pub enum Statement {
     },
     If {
         condition: Box<Expression>,
-        proceed: bool,
         then_contents: Vec<Statement>,
-        otherwise_contents: Vec<Statement>,
+        otherwise_contents: Option<Vec<Statement>>,
     },
     While {
         condition: Box<Expression>,
         proceed: bool,
         then_contents: Vec<Statement>,
-        otherwise_contents: Vec<Statement>,
     },
 }
 
