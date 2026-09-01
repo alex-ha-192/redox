@@ -54,7 +54,6 @@ extern {
     "TextLiteral" => Token::TextLiteral(<String>),
     "CharacterLiteral" => Token::CharacterLiteral(<char>),
     "BooleanLiteral" => Token::BooleanLiteral(<bool>),
-    "ListLiteral" => Token::ListLiteral(<List<T>>),
   }
 }
 
@@ -240,13 +239,25 @@ pub Term: Box<ast::Expression> = {
   <name:"Identifier"> => {
     Box::new(ast::Expression::Identifier(name))
   },
-  <val:"ListLiteral"> => {
-    Box::new(ast::Expression::ListLiteral(val))
-  },
+  ListLiteral,
   "(" <Expression> ")",
 };
 
-pub ListLiteral: ast::ListLiteral
+ListLiteral: Box<ast::Expression> = {
+  "[" "]" => {
+    Box::new(ast::Expression::ListLiteral { first: None, next: None })
+  },
+  "[" <items:ListItems> "]" => items,
+};
+
+ListItems: Box<ast::Expression> = {
+  <first:Expression> => {
+    Box::new(ast::Expression::ListLiteral { first: Some(first), next: None })
+  },
+  <first:Expression> "," <next:ListItems> => {
+    Box::new(ast::Expression::ListLiteral { first: Some(first), next: Some(next) })
+  },
+};
 
 pub FullType: ast::FullType = {
   <maintype:Type> => {
