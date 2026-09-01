@@ -59,7 +59,7 @@ pub enum Expression {
     IntegerLiteral(i64),
     RealLiteral(f64),
     TextLiteral(String),
-    ListLiteral(Vec<Box<Expression>>),
+    ListLiteral(Vec<Box<Expression>>), // TODO: Handle ListLiteral in grammar/lexer?
     BinaryOperation {
         lhs: Box<Expression>,
         operator: Operator,
