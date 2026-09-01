@@ -1,1 +1,126 @@
-// TODO: Grammar
+use crate::tokens::Token;
+use crate::lexer::LexicalError;
+use crate::ast;
+
+grammar;
+
+extern {
+  type Location = usize;
+  type Error = LexicalError;
+
+  enum Token {
+    "Create" => Token::Create,
+    "Set" => Token::Set,
+    "Display" => Token::Display
+    "with" => Token::With,
+    "value" => Token::Value,
+    "takes" => Token::Takes,
+    "returns" => Token::Returns,
+    "Copyof" => Token::Copyof,
+
+    "to" => Token::To,
+    "+" => Token::Add,
+    "-" => Token::Subtract,
+    "*" => Token::Multiply,
+    "/" => Token::Divide,
+    "%" => Token::Modulo,
+    "=" => Token::Equals,
+    "!=" => Token::NotEquals,
+    "Append" => Token::Append,
+
+    "Integer" => Token::Integer,
+    "Real" => Token::Real,
+    "Character" => Token::Character,
+    "Text" => Token::Text,
+    "Boolean" => Token::Boolean,
+    "List" => Token::List,
+    "Nothing" => Token::Nothing,
+
+    "(" => Token::LeftParen,
+    ")" => Token::RightParen,
+    "[" => Token::LeftSquareBrace,
+    "]" => Token::RightSquareBrace,
+    "{" => Token::LeftBrace,
+    "}" => Token::RightBrace,
+    "," => Token::Comma,
+    "<" => Token::LeftAngle,
+    ">" => Token::RightAngle,
+
+    "If" => Token::If,
+    "then" => Token::Then,
+    "otherwise" => Token::Otherwise,
+    "While" => Token::While,
+    "is" => Token::Is,
+
+    "IntegerLiteral" => Token::IntegerLiteral(<i64>),
+    "RealLiteral" => Token::RealLiteral(<f64>),
+    "Identifier" => Token::Identifier(<String>),
+    "TextLiteral" => Token::TextLiteral(<String>),
+    "CharacterLiteral" => Token::CharacterLiteral(<char>),
+    "BooleanLiteral" => Token::BooleanLiteral(<bool>)
+  }
+}
+
+// ================================================================================================
+
+// TODO: Add rest of AST grammar
+
+pub Script: Vec<ast::Statement> = {
+  <stmts:Statement*> => stmts
+}
+
+pub Statement: ast::Statement = {
+  "var" <name:"identifier"> "=" <value:Expression> ";" => {
+    ast::Statement::Variable { name, value }
+  },
+  "print" <value:Expression> ";" => {
+    ast::Statement::Print { value }
+  },
+}
+
+pub Expression: Box<ast::Expression> = {
+  #[precedence(level="1")]
+  Term,
+
+  #[precedence(level="2")] #[assoc(side="left")]
+  <lhs:Expression> "*" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Mul,
+      rhs
+    })
+  },
+  <lhs:Expression> "/" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Div,
+      rhs
+    })
+  },
+
+  #[precedence(level="3")] #[assoc(side="left")]
+  <lhs:Expression> "+" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Add,
+      rhs
+    })
+  },
+  <lhs:Expression> "-" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Sub,
+      rhs
+    })
+  },
+}
+
+pub Term: Box<ast::Expression> = {
+  <val:"int"> => {
+    Box::new(ast::Expression::Integer(val))
+  },
+  <name:"identifier"> => {
+    Box::new(ast::Expression::Variable(name))
+  },
+  "(" <Expression> ")",
+}
