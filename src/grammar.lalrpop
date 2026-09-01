@@ -41,6 +41,8 @@ extern {
     "," => Token::Comma,
     "<" => Token::LeftAngle,
     ">" => Token::RightAngle,
+    "<=" => Token::LessEqual,
+    ">=" => Token::GreaterEqual,
     "If" => Token::If,
     "then" => Token::Then,
     "otherwise" => Token::Otherwise,
@@ -75,6 +77,12 @@ pub Statement: ast::Statement = {
       identifier: name,
       var_type,
       value: Box::new(Some(*value)),
+    }
+  },
+  "Set" <name:"Identifier"> "to" <value:Expression> => {
+    ast::Statement::Set {
+      identifier: name,
+      value
     }
   },
   "Display" <value:Expression> => {
@@ -113,8 +121,16 @@ pub Statement: ast::Statement = {
 // TODO: Expressions
 pub Expression: Box<ast::Expression> = {
   #[precedence(level="1")]
-  Term,
-  #[precedence(level="2")] #[assoc(side="left")]
+  Factor,
+  #[precedence(level="3")] #[assoc(side="left")]
+  <lhs:Expression> "[" <rhs:Expression> "]" => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Access,
+      rhs
+    })
+  },
+  #[precedence(level="3")] #[assoc(side="left")]
   <lhs:Expression> "*" <rhs:Expression> => {
     Box::new(ast::Expression::BinaryOperation {
       lhs,
@@ -129,7 +145,15 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
-  #[precedence(level="3")] #[assoc(side="left")]
+  // In most languages, % has the same precedence as * and /
+  <lhs:Expression> "%" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Modulo,
+      rhs
+    })
+  },
+  #[precedence(level="4")] #[assoc(side="left")]
   <lhs:Expression> "+" <rhs:Expression> => {
     Box::new(ast::Expression::BinaryOperation {
       lhs,
@@ -144,12 +168,74 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
+  // Equality and relative operators
+  #[precedence(level="5")] #[assoc(side="left")]
+  <lhs:Expression> "=" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Equals,
+      rhs
+    })
+  },
+  <lhs:Expression> "!=" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::NotEquals,
+      rhs
+    })
+  },
+  <lhs:Expression> "<" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::LessThan,
+      rhs
+    })
+  },
+  <lhs:Expression> ">" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::GreaterThan,
+      rhs
+    })
+  },
+  <lhs:Expression> "<=" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::LessEqual,
+      rhs
+    })
+  },
+  <lhs:Expression> ">=" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::GreaterEqual,
+      rhs
+    })
+  },
+};
+
+pub Factor: Box<ast::Expression> = {
+  #[precedence(level="1")]
+  Term,
+  #[precedence(level="2")]
+  "-" <operand:Factor> => {
+    Box::new(ast::Expression::UnaryOperation {
+      operator: ast::Operator::Sub,
+      operand
+    })
+  },
 };
 
 // TODO: Term
 pub Term: Box<ast::Expression> = {
   <val:"IntegerLiteral"> => {
     Box::new(ast::Expression::IntegerLiteral(val))
+  },
+  <val:"RealLiteral"> => {
+    Box::new(ast::Expression::RealLiteral(val))
+  },
+  <val:"TextLiteral"> => {
+    Box::new(ast::Expression::TextLiteral(val))
   },
   <name:"Identifier"> => {
     Box::new(ast::Expression::Identifier(name))

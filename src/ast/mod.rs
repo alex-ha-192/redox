@@ -20,6 +20,10 @@ pub enum Operator {
     Modulo,
     Equals,
     NotEquals,
+    LessThan,
+    LessEqual,
+    GreaterThan,
+    GreaterEqual,
     Access, // List access is a binary operator of LIST <ACCESS> INDEX
 }
 

@@ -41,6 +41,10 @@ pub enum Token {
     NotEquals,
     #[token("Append")]
     Append,
+    #[token("<=")]
+    LessEqual,
+    #[token(">=")]
+    GreaterEqual,
 
     // Types
     #[token("Integer")]
