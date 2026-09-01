@@ -58,7 +58,6 @@ extern {
 }
 
 // ================================================================================================
-// TODO: Add rest of AST grammar
 
 pub Program: Vec<ast::Statement> = {
   <stmts:Statement*> => stmts
@@ -118,7 +117,6 @@ pub Statement: ast::Statement = {
   }
 };
 
-// TODO: Expressions
 pub Expression: Box<ast::Expression> = {
   #[precedence(level="1")]
   Factor,
