@@ -30,7 +30,7 @@ fn main() {
 
     let lexer = Lexer::new(&src);
     let parser = grammar::ProgramParser::new();
-    let ast = parser.parse(lexer)?;
+    let _ast = parser.parse(lexer);
 
     // Add parsing
 }

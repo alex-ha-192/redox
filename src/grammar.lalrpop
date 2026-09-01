@@ -7,7 +7,6 @@ grammar;
 extern {
   type Location = usize;
   type Error = LexicalError;
-
   enum Token {
     "Create" => Token::Create,
     "Set" => Token::Set,
@@ -17,7 +16,6 @@ extern {
     "takes" => Token::Takes,
     "returns" => Token::Returns,
     "Copyof" => Token::Copyof,
-
     "to" => Token::To,
     "+" => Token::Add,
     "-" => Token::Subtract,
@@ -27,7 +25,6 @@ extern {
     "=" => Token::Equals,
     "!=" => Token::NotEquals,
     "Append" => Token::Append,
-
     "Integer" => Token::Integer,
     "Real" => Token::Real,
     "Character" => Token::Character,
@@ -35,7 +32,6 @@ extern {
     "Boolean" => Token::Boolean,
     "List" => Token::List,
     "Nothing" => Token::Nothing,
-
     "(" => Token::LeftParen,
     ")" => Token::RightParen,
     "[" => Token::LeftSquareBrace,
@@ -45,13 +41,11 @@ extern {
     "," => Token::Comma,
     "<" => Token::LeftAngle,
     ">" => Token::RightAngle,
-
     "If" => Token::If,
     "then" => Token::Then,
     "otherwise" => Token::Otherwise,
     "While" => Token::While,
     "is" => Token::Is,
-
     "IntegerLiteral" => Token::IntegerLiteral(<i64>),
     "RealLiteral" => Token::RealLiteral(<f64>),
     "Identifier" => Token::Identifier(<String>),
@@ -62,43 +56,64 @@ extern {
 }
 
 // ================================================================================================
-
 // TODO: Add rest of AST grammar
 
-pub Script: Vec<ast::Statement> = {
+pub Program: Vec<ast::Statement> = {
   <stmts:Statement*> => stmts
-}
+};
 
 pub Statement: ast::Statement = {
-  "Create" <var_type:Type> <name:"identifier"> => {
-    ast::Statement::Create { name, var_type, None }
+  "Create" <var_type:Type> <name:"Identifier"> => {
+    ast::Statement::Create {
+      identifier: name,
+      var_type,
+      value: Box::new(None),
+    }
   },
-  "Create" <var_type:Type> <name:"identifier"> "with" "value" <value:Expression> => {
-    ast::Statement::Create { name, var_type, Some(value) }
+  "Create" <var_type:Type> <name:"Identifier"> "with" "value" <value:Expression> => {
+    ast::Statement::Create {
+      identifier: name,
+      var_type,
+      value: Box::new(Some(*value)),
+    }
   },
   "Display" <value:Expression> => {
     ast::Statement::Display { value }
   },
-  "If" <cond:Expression> "{" <then:Vec<ast::Statement>> "}" => {
-    ast::Statement::If { cond, then, None }
+  "If" <cond:Expression> "{" <then:Statement*> "}" => {
+    ast::Statement::If {
+      condition: cond,
+      then_contents: then,
+      otherwise_contents: None,
+    }
   },
-  "If" <cond:Expression> "{" <then:Vec<ast::Statement>> "}" "otherwise" "{" <otherwise:Vec<ast::Statement>> "}" => {
-    ast::Statement::If { cond, then, otherwise }
+  "If" <cond:Expression> "{" <then:Statement*> "}" "otherwise" "{" <otherwise:Statement*> "}" => {
+    ast::Statement::If {
+      condition: cond,
+      then_contents: then,
+      otherwise_contents: Some(otherwise),
+    }
   },
-  "While" <cond:Expression> "is" <proceed:"BooleanLiteral"> "{" <then:Vec<ast::Statement>> "}" => {
-    ast::Statement::While { cond, proceed, then }
+  "While" <cond:Expression> "is" <proceed:"BooleanLiteral"> "{" <then:Statement*> "}" => {
+    ast::Statement::While {
+      condition: cond,
+      proceed,
+      then_contents: then,
+    }
   },
-  "While" <cond:Expression> "{" <then:Vec<ast::Statement>> "}" => {
-    ast::Statement::While { cond, true, then }
+  "While" <cond:Expression> "{" <then:Statement*> "}" => {
+    ast::Statement::While {
+      condition: cond,
+      proceed: true,
+      then_contents: then,
+    }
   }
-}
-
+};
 
 // TODO: Expressions
 pub Expression: Box<ast::Expression> = {
   #[precedence(level="1")]
   Term,
-
   #[precedence(level="2")] #[assoc(side="left")]
   <lhs:Expression> "*" <rhs:Expression> => {
     Box::new(ast::Expression::BinaryOperation {
@@ -114,7 +129,6 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
-
   #[precedence(level="3")] #[assoc(side="left")]
   <lhs:Expression> "+" <rhs:Expression> => {
     Box::new(ast::Expression::BinaryOperation {
@@ -130,18 +144,18 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
-}
+};
 
 // TODO: Term
 pub Term: Box<ast::Expression> = {
-  <val:"int"> => {
-    Box::new(ast::Expression::Integer(val))
+  <val:"IntegerLiteral"> => {
+    Box::new(ast::Expression::IntegerLiteral(val))
   },
-  <name:"identifier"> => {
-    Box::new(ast::Expression::Variable(name))
+  <name:"Identifier"> => {
+    Box::new(ast::Expression::Identifier(name))
   },
   "(" <Expression> ")",
-}
+};
 
 pub Type: ast::Type = {
     "Integer" => ast::Type::Integer,

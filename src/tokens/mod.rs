@@ -1,7 +1,7 @@
 use logos::Logos;
 use std::fmt;
 
-#[derive(Logos, Debug, PartialEq)]
+#[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\n\f]+")] // Ignore this regex pattern between tokens
 pub enum Token {
     // Standard syntax
