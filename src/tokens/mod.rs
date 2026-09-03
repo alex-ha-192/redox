@@ -23,6 +23,10 @@ pub enum Token {
     Copyof,
     #[token("to")]
     To,
+    #[token("Function")]
+    Function,
+    #[token("Return")]
+    Return,
 
     // Operations
     #[token("+")]

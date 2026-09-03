@@ -17,6 +17,8 @@ extern {
     "returns" => Token::Returns,
     "Copyof" => Token::Copyof,
     "to" => Token::To,
+    "Function" => Token::Function,
+    "Return" => Token::Return,
     "+" => Token::Add,
     "-" => Token::Subtract,
     "*" => Token::Multiply,
@@ -56,6 +58,15 @@ extern {
     "BooleanLiteral" => Token::BooleanLiteral(<bool>),
   }
 }
+
+Comma<T>: Vec<T> = {
+  <mut items:(<T> ",")*> <last:T?> => {
+    match last {
+      Some(t) => { items.push(t); items },
+      None => items,
+    }
+  }
+};
 
 // ================================================================================================
 
@@ -114,7 +125,25 @@ pub Statement: ast::Statement = {
       proceed: true,
       then_contents: then,
     }
-  }
+  },
+  "Function" <name:"Identifier"> "takes" "(" <arguments:Comma<FunctionArgument>> ")" "returns" <return_type:FullType> "{" <contents:Statement*> "}" => {
+    ast::Statement::Function {
+      name,
+      arguments,
+      return_type: Box::new(return_type),
+      contents,
+    }
+  },
+  "Return" <expr:Expression> => {
+    ast::Statement::Return {
+      operand: Some(expr),
+    }
+  },
+  "Return" => {
+    ast::Statement::Return {
+      operand: None,
+    }
+  },
 };
 
 pub Expression: Box<ast::Expression> = {
@@ -237,24 +266,32 @@ pub Term: Box<ast::Expression> = {
   <name:"Identifier"> => {
     Box::new(ast::Expression::Identifier(name))
   },
+  <function_identifier:"Identifier"> "(" <args:Comma<Expression>> ")" => {
+    Box::new(ast::Expression::FunctionCall {
+      function_identifier,
+      arguments: args.into_iter().map(|e| *e).collect(),
+    })
+  },
   ListLiteral,
   "(" <Expression> ")",
 };
 
 ListLiteral: Box<ast::Expression> = {
-  "[" "]" => {
-    Box::new(ast::Expression::ListLiteral { first: None, next: None })
+  "[" <elements:Comma<Expression>> "]" => {
+    Box::new(ast::Expression::ListLiteral {
+        contents: elements.into_iter().map(|e| *e).collect(),
+    })
   },
-  "[" <items:ListItems> "]" => items,
 };
 
-ListItems: Box<ast::Expression> = {
-  <first:Expression> => {
-    Box::new(ast::Expression::ListLiteral { first: Some(first), next: None })
-  },
-  <first:Expression> "," <next:ListItems> => {
-    Box::new(ast::Expression::ListLiteral { first: Some(first), next: Some(next) })
-  },
+FunctionArgument: ast::FunctionArgument = {
+  <copyof:"Copyof"?> <arg_type:FullType> <identifier:"Identifier"> => {
+    ast::FunctionArgument {
+      copyof: copyof.is_some(),
+      arg_type: Box::new(arg_type),
+      identifier,
+    }
+  }
 };
 
 pub FullType: ast::FullType = {

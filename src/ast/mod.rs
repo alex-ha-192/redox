@@ -1,5 +1,3 @@
-// TODO: Functions
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     Integer,
@@ -15,6 +13,13 @@ pub enum Type {
 pub struct FullType {
     pub main: Type,
     pub subtype: Option<Box<FullType>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionArgument {
+    pub copyof: bool,
+    pub arg_type: Box<FullType>,
+    pub identifier: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,6 +62,15 @@ pub enum Statement {
         proceed: bool,
         then_contents: Vec<Statement>,
     },
+    Function {
+        name: String,
+        arguments: Vec<FunctionArgument>,
+        return_type: Box<FullType>,
+        contents: Vec<Statement>,
+    },
+    Return {
+        operand: Option<Box<Expression>>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,8 +80,7 @@ pub enum Expression {
     RealLiteral(f64),
     TextLiteral(String),
     ListLiteral {
-        first: Option<Box<Expression>>, // Empty literal
-        next: Option<Box<Expression>>,
+        contents: Vec<Expression>,
     },
     BinaryOperation {
         lhs: Box<Expression>,
@@ -78,4 +91,8 @@ pub enum Expression {
         operator: Operator,
         operand: Box<Expression>,
     }, // Mostly for the ability to have a unary minus
+    FunctionCall {
+        function_identifier: String,
+        arguments: Vec<Expression>,
+    },
 }
