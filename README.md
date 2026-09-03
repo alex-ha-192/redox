@@ -10,7 +10,7 @@ This project was started by [Alex Hegedus-Adkin](https://www.github.com/alex-ha-
 ## TODO
 
 - [ ] AST/runtime environment
-- [ ] [Subroutine support](https://github.com/alex-ha-192/simplelang/blob/main/spec/SUBROUTINES.md)
+- [ ] AST visualiser
 
 ## Licencing
 
