@@ -1,10 +1,11 @@
 mod ast;
 mod lexer;
 mod tokens;
+mod ui;
 
 use clap::Parser;
+use gtk::Application;
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Button};
 use lalrpop_util::lalrpop_mod;
 use lexer::Lexer;
 use std::cell::RefCell;
@@ -26,6 +27,7 @@ struct Args {
     show_tree: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Default)]
 struct AstState {
     ast: Vec<Statement>,
@@ -58,7 +60,7 @@ fn main() {
                 }));
                 let app = Application::builder().application_id(APP_ID).build();
                 app.connect_activate(move |app| {
-                    build_ui(app, ast_state.clone());
+                    ui::build_ui(app, ast_state.clone());
                 });
                 app.run_with_args::<String>(&[]);
             }
@@ -67,33 +69,4 @@ fn main() {
     }
 
     // TODO: Pass AST to a runtime environment and execute
-}
-
-fn build_ui(app: &Application, state: Rc<RefCell<AstState>>) {
-    // TODO: GUI for AST visualiser
-
-    // Create a button with label and margins
-    let button = Button::builder()
-        .label("Press me!")
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build();
-
-    // Connect to "clicked" signal of `button`
-    button.connect_clicked(|button| {
-        // Set the label to "Hello World!" after the button has been clicked on
-        button.set_label("Hello World!");
-    });
-
-    // Create a window
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Redox AST Explorer")
-        .child(&button)
-        .build();
-
-    // Present window
-    window.present();
 }
