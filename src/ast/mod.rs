@@ -22,7 +22,7 @@ pub struct FunctionArgument {
     pub identifier: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Operator {
     Add,
     Sub,

@@ -1,4 +1,4 @@
-use crate::ast::{FullType, FunctionArgument, Statement};
+use crate::ast::{FullType, FunctionArgument, Operator, Statement};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,12 +13,16 @@ pub enum Value {
 }
 
 pub enum RuntimeError {
-    TypeMismatch {
+    TypeMismatchError {
         expected_type: FullType,
         evaluated_type: FullType,
     },
-    VarExistsError {
+    VarDoesNotExistError {
         identifier: String,
+    },
+    OperatorInputTypeError {
+        operator: Operator,
+        values: Vec<Value>,
     },
 }
 
