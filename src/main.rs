@@ -1,8 +1,11 @@
 mod ast;
+mod expr;
 mod lexer;
+mod runtime;
 mod tokens;
 mod ui;
 
+use crate::ast::Statement;
 use clap::Parser;
 use gtk::Application;
 use gtk::prelude::*;
@@ -12,8 +15,6 @@ use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
 
-use crate::ast::Statement;
-
 const APP_ID: &str = "com.alex-ha.redox";
 
 lalrpop_mod!(grammar);
@@ -21,13 +22,15 @@ lalrpop_mod!(grammar);
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// SIMPLE source file
     #[arg(short, long)]
     input: String,
+
+    /// Visualise syntax tree instead of running program
     #[arg(short, long, default_value_t = false)]
-    show_tree: bool,
+    ast: bool,
 }
 
-#[allow(dead_code)]
 #[derive(Default)]
 struct AstState {
     ast: Vec<Statement>,
@@ -54,7 +57,8 @@ fn main() {
     match &ast {
         Ok(good_ast) => {
             println!("{:?}", good_ast);
-            if args.show_tree {
+            if args.ast {
+                // Visualise AST
                 let ast_state = Rc::new(RefCell::new(AstState {
                     ast: good_ast.clone(),
                 }));
@@ -63,6 +67,9 @@ fn main() {
                     ui::build_ui(app, ast_state.clone());
                 });
                 app.run_with_args::<String>(&[]);
+            } else {
+                // Execute the program from the AST
+                runtime::execute(&good_ast);
             }
         }
         Err(e) => panic!("Error when constructing AST: {:?}", e),
