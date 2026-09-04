@@ -19,6 +19,7 @@ extern {
     "to" => Token::To,
     "Function" => Token::Function,
     "Return" => Token::Return,
+    "Run" => Token::Run,
     "+" => Token::Add,
     "-" => Token::Subtract,
     "*" => Token::Multiply,
@@ -142,6 +143,11 @@ pub Statement: ast::Statement = {
   "Return" => {
     ast::Statement::Return {
       operand: None,
+    }
+  },
+  "Run" <expr:Expression> => {
+    ast::Statement::Run {
+      operand: expr
     }
   },
 };

@@ -71,6 +71,9 @@ pub enum Statement {
     Return {
         operand: Option<Box<Expression>>,
     },
+    Run {
+        operand: Box<Expression>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

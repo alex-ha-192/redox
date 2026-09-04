@@ -5,4 +5,5 @@ Function AddTwoNumbers takes (Copyof Integer a, Integer b) returns Integer {
 Create Integer x with value 5
 Create Integer y with value 7
 
+Run AddTwoNumbers(x, y)
 Display AddTwoNumbers(x, y)

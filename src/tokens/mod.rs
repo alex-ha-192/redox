@@ -27,6 +27,8 @@ pub enum Token {
     Function,
     #[token("Return")]
     Return,
+    #[token("Run")]
+    Run,
 
     // Operations
     #[token("+")]
