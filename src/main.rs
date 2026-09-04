@@ -74,6 +74,4 @@ fn main() {
         }
         Err(e) => panic!("Error when constructing AST: {:?}", e),
     }
-
-    // TODO: Pass AST to a runtime environment and execute
 }
