@@ -1,0 +1,4 @@
+Create Integer foo
+Display foo
+Set foo to foo + 3
+Display foo

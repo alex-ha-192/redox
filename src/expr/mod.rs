@@ -3,7 +3,9 @@ mod ops;
 use crate::{
     ast::{
         Expression::{self, *},
+        FullType,
         Operator::*,
+        Type,
     },
     expr::ops::*,
     runtime::{
@@ -14,6 +16,18 @@ use crate::{
     },
 };
 use std::collections::HashMap;
+
+pub fn get_default(ft: &FullType) -> Value {
+    match ft.main {
+        Type::Integer => Integer(0),
+        Type::Real => Real(0.0),
+        Type::Character => Character('a'),
+        Type::Text => Text("".to_string()),
+        Type::Boolean => Boolean(true),
+        Type::List => List(vec![]),
+        Type::Nothing => Nothing,
+    }
+}
 
 pub fn evaluate(
     expr: &Expression,

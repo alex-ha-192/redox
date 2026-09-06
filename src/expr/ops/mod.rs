@@ -1,10 +1,19 @@
 use crate::runtime::{
     RuntimeError::{self, *},
-    Value,
+    Value::{self, *},
 };
 
 pub fn eval_add(lhs: Value, rhs: Value) -> Result<Value, RuntimeError> {
-    todo!()
+    match (&lhs, &rhs) {
+        (Integer(i1), Integer(i2)) => Ok(Integer(i1 + i2)),
+        (Integer(i1), Real(r2)) => Ok(Real(*i1 as f64 + r2)),
+        (Real(r1), Integer(i2)) => Ok(Real(r1 + *i2 as f64)),
+        (Real(r1), Real(r2)) => Ok(Real(r1 + r2)),
+        _ => Err(OperatorInputTypeError {
+            operator: crate::ast::Operator::Add,
+            values: vec![lhs, rhs],
+        }),
+    }
 }
 
 pub fn eval_sub(lhs: Value, rhs: Value) -> Result<Value, RuntimeError> {

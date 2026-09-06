@@ -26,9 +26,13 @@ struct Args {
     #[arg(short, long)]
     input: String,
 
+    /// Print AST for debugging purposes
+    #[arg(long, default_value_t = false)]
+    debug: bool,
+
     /// Visualise syntax tree instead of running program
     #[arg(short, long, default_value_t = false)]
-    ast: bool,
+    tree: bool,
 }
 
 #[derive(Default)]
@@ -43,8 +47,6 @@ fn main() {
 
     let args = Args::parse();
 
-    println!("Args: {:?}", args);
-
     let src = match fs::read_to_string(args.input) {
         Ok(contents) => contents,
         Err(e) => panic!("Error when reading source file: {:?}", e),
@@ -56,8 +58,10 @@ fn main() {
 
     match &ast {
         Ok(good_ast) => {
-            println!("{:?}", good_ast);
-            if args.ast {
+            if args.debug {
+                println!("{:?}", good_ast);
+            }
+            if args.tree {
                 // Visualise AST
                 let ast_state = Rc::new(RefCell::new(AstState {
                     ast: good_ast.clone(),
@@ -69,7 +73,10 @@ fn main() {
                 app.run_with_args::<String>(&[]);
             } else {
                 // Execute the program from the AST
-                runtime::execute(&good_ast);
+                match runtime::execute(&good_ast) {
+                    Ok(_) => {}
+                    Err(e) => panic!("Error when executing program: {:?}", e),
+                }
             }
         }
         Err(e) => panic!("Error when constructing AST: {:?}", e),
