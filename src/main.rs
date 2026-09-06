@@ -6,12 +6,14 @@ mod tokens;
 mod ui;
 
 use crate::ast::Statement;
+use crate::runtime::SymbolTable;
 use clap::Parser;
 use gtk::Application;
 use gtk::prelude::*;
 use lalrpop_util::lalrpop_mod;
 use lexer::Lexer;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
 
@@ -73,7 +75,13 @@ fn main() {
                 app.run_with_args::<String>(&[]);
             } else {
                 // Execute the program from the AST
-                match runtime::execute(&good_ast) {
+                let mut symbol_table: SymbolTable = SymbolTable {
+                    entries: HashMap::new(),
+                    is_function_root: false,
+                };
+                let mut symbol_table_stack = vec![symbol_table];
+                let mut function_table = HashMap::new();
+                match runtime::execute(&good_ast, &mut symbol_table_stack, &mut function_table) {
                     Ok(_) => {}
                     Err(e) => panic!("Error when executing program: {:?}", e),
                 }

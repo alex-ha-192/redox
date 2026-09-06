@@ -1,0 +1,13 @@
+Create Integer foo with value 7
+
+If foo Equals 7 then {
+    Create Integer bar with value 2
+    Set foo to 8
+} otherwise {
+    Display "This shouldn't happen!"
+}
+
+Display foo
+Display "This should be 8"
+Display bar
+Display "This should fail and therefore not print!"

@@ -106,7 +106,7 @@ pub Statement: ast::Statement = {
       otherwise_contents: None,
     }
   },
-  "If" <cond:Expression> "{" <then:Statement*> "}" "otherwise" "{" <otherwise:Statement*> "}" => {
+  "If" <cond:Expression> "then" "{" <then:Statement*> "}" "otherwise" "{" <otherwise:Statement*> "}" => {
     ast::Statement::If {
       condition: cond,
       then_contents: then,
