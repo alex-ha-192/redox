@@ -1,0 +1,6 @@
+Create Integer foo with value 0
+
+While foo NotEquals 10 {
+    Display foo
+    Set foo to foo + 1
+}

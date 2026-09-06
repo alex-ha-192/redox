@@ -92,7 +92,23 @@ pub fn eval_eq(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeError
 }
 
 pub fn eval_neq(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeError> {
-    todo!()
+    match eval_eq(lhs, rhs)? {
+        (ft, Boolean(v))
+            if ft
+                == FullType {
+                    main: Type::Boolean,
+                    subtype: None,
+                } =>
+        {
+            Ok((ft, Boolean(!v)))
+        }
+        _ => {
+            return Err(RuntimeError::OperatorInputTypeError {
+                operator: crate::ast::Operator::NotEquals,
+                values: vec![],
+            });
+        }
+    }
 }
 
 pub fn eval_lt(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeError> {

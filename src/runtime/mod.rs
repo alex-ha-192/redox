@@ -167,6 +167,42 @@ pub fn execute(
                     });
                 }
             },
+            Statement::While {
+                condition,
+                proceed,
+                then_contents,
+            } => loop {
+                match evaluate(condition, symbol_table_stack, function_table)? {
+                    (
+                        FullType {
+                            main: Type::Boolean,
+                            subtype: None,
+                        },
+                        Value::Boolean(a),
+                    ) if a == *proceed => {
+                        symbol_table_stack.push(SymbolTable {
+                            entries: HashMap::new(),
+                            is_function_root: false,
+                        });
+                        execute(then_contents, symbol_table_stack, function_table)?;
+                        symbol_table_stack.pop();
+                    }
+                    (
+                        FullType {
+                            main: Type::Boolean,
+                            subtype: None,
+                        },
+                        Value::Boolean(_),
+                    ) => {
+                        break;
+                    }
+                    _ => {
+                        return Err(RuntimeError::ConditionalTypeError {
+                            condition: *condition.clone(),
+                        });
+                    }
+                }
+            },
             _ => {
                 println!("This statement has not yet been implemented in Redox.");
                 todo!()
