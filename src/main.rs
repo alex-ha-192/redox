@@ -15,6 +15,7 @@ use lexer::Lexer;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 use std::rc::Rc;
 
 const APP_ID: &str = "com.alex-ha.redox";
@@ -25,7 +26,7 @@ lalrpop_mod!(grammar);
 #[command(version, about, long_about = None)]
 struct Args {
     /// SIMPLE source file
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = "".to_string())]
     input: String,
 
     /// Print AST for debugging purposes
@@ -48,12 +49,27 @@ fn main() {
 
     let args = Args::parse();
 
-    let src = match fs::read_to_string(args.input) {
+    let src_path = match fs::canonicalize(match args.input {
+        s if s.len() > 0 => s,
+        _ => {
+            let mut buf = String::new();
+            println!("Please enter the path to your SIMPLE source file:");
+            match std::io::stdin().read_line(&mut buf) {
+                Ok(_) => buf.trim().to_string(),
+                Err(e) => panic!("Error when reading user input: {:?}", e),
+            }
+        }
+    }) {
+        Ok(p) => p,
+        Err(e) => panic!("Error reading user input/argument: {:?}", e),
+    };
+
+    let src_contents = match fs::read_to_string(src_path) {
         Ok(contents) => contents,
         Err(e) => panic!("Error when reading source file: {:?}", e),
     };
 
-    let lexer = Lexer::new(&src);
+    let lexer = Lexer::new(&src_contents);
     let parser = grammar::ProgramParser::new();
     let ast = parser.parse(lexer);
 
