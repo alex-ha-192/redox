@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use crate::expr::{FullType, Type};
 use crate::runtime::{
     RuntimeError::{self, *},
@@ -59,7 +62,7 @@ pub fn eval_modulo(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeE
 
 pub fn eval_eq(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeError> {
     match (lhs, rhs) {
-        (Integer(i1), (Integer(i2))) => Ok((
+        (Integer(i1), Integer(i2)) => Ok((
             FullType {
                 main: Type::Boolean,
                 subtype: None,

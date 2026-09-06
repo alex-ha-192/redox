@@ -31,15 +31,14 @@ struct Args {
     /// Print AST for debugging purposes
     #[arg(long, default_value_t = false)]
     debug: bool,
-
-    /// Visualise syntax tree instead of running program
-    #[arg(short, long, default_value_t = false)]
-    tree: bool,
+    // /// Visualise syntax tree instead of running program
+    // #[arg(short, long, default_value_t = false)]
+    // tree: bool,
 }
 
 #[derive(Default)]
 struct AstState {
-    ast: Vec<Statement>,
+    _ast: Vec<Statement>,
 }
 
 fn main() {
@@ -63,10 +62,12 @@ fn main() {
             if args.debug {
                 println!("{:?}", good_ast);
             }
-            if args.tree {
+            if false
+            /* args.tree */
+            {
                 // Visualise AST
                 let ast_state = Rc::new(RefCell::new(AstState {
-                    ast: good_ast.clone(),
+                    _ast: good_ast.clone(),
                 }));
                 let app = Application::builder().application_id(APP_ID).build();
                 app.connect_activate(move |app| {
@@ -75,7 +76,7 @@ fn main() {
                 app.run_with_args::<String>(&[]);
             } else {
                 // Execute the program from the AST
-                let mut symbol_table: SymbolTable = SymbolTable {
+                let symbol_table: SymbolTable = SymbolTable {
                     entries: HashMap::new(),
                     is_function_root: false,
                 };

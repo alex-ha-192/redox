@@ -26,6 +26,7 @@ fn can_coerce_b_to_a(a: FullType, b: FullType) -> bool {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum RuntimeError {
     SetVarTypeError {
@@ -51,6 +52,7 @@ pub enum RuntimeSuccess {
     RuntimeSuccess,
 }
 
+#[allow(dead_code)]
 pub struct FunctionAttributes {
     arguments: Vec<FunctionArgument>,
     return_type: Box<FullType>,

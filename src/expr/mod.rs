@@ -136,8 +136,8 @@ pub fn evaluate<'a>(
             }
         }
         FunctionCall {
-            function_identifier,
-            arguments,
+            function_identifier: _function_identifier,
+            arguments: _arguments,
         } => {
             todo!()
         }
