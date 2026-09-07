@@ -2,6 +2,7 @@
 name = "redox"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/alex-ha-192/redox"
 
 [build-dependencies]
 lalrpop = { version = "0.23.1", default-features = false }
