@@ -137,12 +137,12 @@ pub Statement: ast::Statement = {
   },
   "Return" <expr:Expression> => {
     ast::Statement::Return {
-      operand: Some(expr),
+      operand: expr,
     }
   },
   "Return" => {
     ast::Statement::Return {
-      operand: None,
+      operand: Box::new(ast::Expression::NothingLiteral()),
     }
   },
   "Run" <expr:Expression> => {

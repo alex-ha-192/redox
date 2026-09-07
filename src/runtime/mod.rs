@@ -27,8 +27,11 @@ fn can_coerce_b_to_a(a: FullType, b: FullType) -> bool {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RuntimeError {
+    ReturnValueNotError {
+        ret_val: (FullType, Value),
+    },
     SetVarTypeError {
         original_value: Value,
         new_value: Value,
@@ -46,6 +49,19 @@ pub enum RuntimeError {
     ConditionalTypeError {
         condition: Expression,
     },
+    RedefineFunctionError {
+        identifier: String,
+    },
+    FunctionDoesNotExistError {
+        identifier: String,
+    },
+    FunctionArgumentTypeError {
+        expected_type: FullType,
+        received_type: FullType,
+    },
+    FunctionArgumentNumberError {
+        identifier: String,
+    },
 }
 
 pub enum RuntimeSuccess {
@@ -53,12 +69,14 @@ pub enum RuntimeSuccess {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct FunctionAttributes {
-    arguments: Vec<FunctionArgument>,
-    return_type: Box<FullType>,
-    contents: Vec<Statement>,
+    pub arguments: Vec<FunctionArgument>,
+    pub return_type: Box<FullType>,
+    pub contents: Vec<Statement>,
 }
 
+#[derive(Clone, Debug)]
 pub struct SymbolTable {
     pub entries: HashMap<String, (FullType, Value)>,
     pub is_function_root: bool,
@@ -68,6 +86,7 @@ pub fn execute(
     program: &Vec<Statement>,
     symbol_table_stack: &mut Vec<SymbolTable>,
     function_table: &mut HashMap<String, FunctionAttributes>,
+    return_value_stack: &mut Vec<(FullType, Value)>,
 ) -> Result<RuntimeSuccess, RuntimeError> {
     for statement in program {
         match statement {
@@ -80,7 +99,8 @@ pub fn execute(
                     let new_entry = match &**value {
                         Some(expr) => (
                             var_type.clone(),
-                            evaluate(expr, symbol_table_stack, function_table)?.1,
+                            evaluate(expr, symbol_table_stack, function_table, return_value_stack)?
+                                .1,
                         ),
                         None => (var_type.clone(), get_default(var_type)),
                     };
@@ -97,7 +117,13 @@ pub fn execute(
                 }
             },
             Statement::Set { identifier, value } => {
-                let var_new_val = evaluate(value, symbol_table_stack, function_table)?;
+                // TODO: Implement non-Copyof variables
+                let var_new_val = evaluate(
+                    value,
+                    symbol_table_stack,
+                    function_table,
+                    return_value_stack,
+                )?;
                 match get_symbol_home(identifier.clone(), symbol_table_stack) {
                     Some(st_v) => {
                         match can_coerce_b_to_a(
@@ -125,14 +151,25 @@ pub fn execute(
             Statement::Display { value } => {
                 println!(
                     "{:?}",
-                    evaluate(value, symbol_table_stack, function_table)?.1
+                    evaluate(
+                        value,
+                        symbol_table_stack,
+                        function_table,
+                        return_value_stack
+                    )?
+                    .1
                 )
             }
             Statement::If {
                 condition,
                 then_contents,
                 otherwise_contents,
-            } => match evaluate(condition, symbol_table_stack, function_table)? {
+            } => match evaluate(
+                condition,
+                symbol_table_stack,
+                function_table,
+                return_value_stack,
+            )? {
                 (
                     FullType {
                         main: Type::Boolean,
@@ -144,7 +181,12 @@ pub fn execute(
                         entries: HashMap::new(),
                         is_function_root: false,
                     });
-                    execute(then_contents, symbol_table_stack, function_table)?;
+                    execute(
+                        then_contents,
+                        symbol_table_stack,
+                        function_table,
+                        return_value_stack,
+                    )?;
                     symbol_table_stack.pop();
                 }
                 (
@@ -159,7 +201,12 @@ pub fn execute(
                             entries: HashMap::new(),
                             is_function_root: false,
                         });
-                        execute(otherwise, symbol_table_stack, function_table)?;
+                        execute(
+                            otherwise,
+                            symbol_table_stack,
+                            function_table,
+                            return_value_stack,
+                        )?;
                         symbol_table_stack.pop();
                     }
                 }
@@ -174,7 +221,12 @@ pub fn execute(
                 proceed,
                 then_contents,
             } => loop {
-                match evaluate(condition, symbol_table_stack, function_table)? {
+                match evaluate(
+                    condition,
+                    symbol_table_stack,
+                    function_table,
+                    return_value_stack,
+                )? {
                     (
                         FullType {
                             main: Type::Boolean,
@@ -186,7 +238,12 @@ pub fn execute(
                             entries: HashMap::new(),
                             is_function_root: false,
                         });
-                        execute(then_contents, symbol_table_stack, function_table)?;
+                        execute(
+                            then_contents,
+                            symbol_table_stack,
+                            function_table,
+                            return_value_stack,
+                        )?;
                         symbol_table_stack.pop();
                     }
                     (
@@ -205,9 +262,49 @@ pub fn execute(
                     }
                 }
             },
-            _ => {
-                println!("This statement has not yet been implemented in Redox.");
-                todo!()
+            Statement::Function {
+                name,
+                arguments,
+                return_type,
+                contents,
+            } => {
+                // Declaring a function, add to global
+                match function_table.insert(
+                    name.clone(),
+                    FunctionAttributes {
+                        arguments: arguments.clone(),
+                        return_type: return_type.clone(),
+                        contents: contents.clone(),
+                    },
+                ) {
+                    None => {}
+                    Some(_) => {
+                        // Function already exists
+                        return Err(RuntimeError::RedefineFunctionError {
+                            identifier: name.clone(),
+                        });
+                    }
+                }
+            }
+            Statement::Return { operand } => {
+                let ret_val = evaluate(
+                    operand,
+                    symbol_table_stack,
+                    function_table,
+                    return_value_stack,
+                )?;
+
+                return_value_stack.push(ret_val.clone());
+
+                return Err(RuntimeError::ReturnValueNotError { ret_val });
+            }
+            Statement::Run { operand } => {
+                let _ = evaluate(
+                    operand,
+                    symbol_table_stack,
+                    function_table,
+                    return_value_stack,
+                )?;
             }
         }
     }

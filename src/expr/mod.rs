@@ -13,6 +13,7 @@ use crate::{
         RuntimeError::{self, *},
         SymbolTable,
         Value::{self, *},
+        execute,
     },
 };
 use std::collections::HashMap;
@@ -45,13 +46,14 @@ pub fn get_symbol_home<'a>(
 
 pub fn evaluate<'a>(
     expr: &Expression,
-    symbol_table: &'a mut [SymbolTable],
-    function_table: &HashMap<String, FunctionAttributes>,
+    symbol_table: &'a mut Vec<SymbolTable>,
+    function_table: &mut HashMap<String, FunctionAttributes>,
+    return_value_stack: &'a mut Vec<(FullType, Value)>,
 ) -> Result<(FullType, Value), RuntimeError> {
     match expr {
         Identifier(s) => {
-            let (last, rest) = match symbol_table.split_last_mut() {
-                Some((last, rest)) => (last, rest),
+            let last = match symbol_table.last() {
+                Some(l) => l,
                 None => {
                     return Err(RuntimeError::VarDoesNotExistError {
                         identifier: s.clone(),
@@ -61,7 +63,14 @@ pub fn evaluate<'a>(
             match last.entries.get(s) {
                 Some(v) => Ok(v.to_owned()),
                 None => match last.is_function_root {
-                    false => evaluate(expr, rest, function_table),
+                    false => {
+                        let mut popped_st = vec![];
+                        for i in 0..symbol_table.len() - 1 {
+                            // Oh my God this is so inefficient I hate it
+                            popped_st.push(symbol_table[i].clone());
+                        }
+                        evaluate(expr, symbol_table, function_table, return_value_stack)
+                    }
                     true => Err(VarDoesNotExistError {
                         identifier: s.clone(),
                     }),
@@ -89,11 +98,18 @@ pub fn evaluate<'a>(
             },
             Text(t.clone()),
         )),
+        NothingLiteral() => Ok((
+            FullType {
+                main: Type::Nothing,
+                subtype: None,
+            },
+            Nothing,
+        )),
         ListLiteral { contents } => {
             let mut values = Vec::new();
             let mut elem_type: Option<FullType> = None;
             for expr in contents {
-                let (t, v) = evaluate(expr, symbol_table, function_table)?;
+                let (t, v) = evaluate(expr, symbol_table, function_table, return_value_stack)?;
                 if elem_type.is_none() {
                     elem_type = Some(t);
                 }
@@ -106,8 +122,8 @@ pub fn evaluate<'a>(
             Ok((list_type, Value::List(values)))
         }
         BinaryOperation { lhs, operator, rhs } => {
-            let lhs = evaluate(lhs, symbol_table, function_table)?;
-            let rhs = evaluate(rhs, symbol_table, function_table)?;
+            let lhs = evaluate(lhs, symbol_table, function_table, return_value_stack)?;
+            let rhs = evaluate(rhs, symbol_table, function_table, return_value_stack)?;
 
             match operator {
                 Add => eval_add(lhs.1, rhs.1),
@@ -125,7 +141,7 @@ pub fn evaluate<'a>(
             }
         }
         UnaryOperation { operator, operand } => {
-            let operand = evaluate(operand, symbol_table, function_table)?;
+            let operand = evaluate(operand, symbol_table, function_table, return_value_stack)?;
             match operator {
                 Add => Ok(operand),
                 Sub => eval_sub(Real(0.0), operand.1),
@@ -136,10 +152,89 @@ pub fn evaluate<'a>(
             }
         }
         FunctionCall {
-            function_identifier: _function_identifier,
-            arguments: _arguments,
+            function_identifier,
+            arguments,
         } => {
-            todo!()
+            // Get information about function
+            let function = match function_table.get(function_identifier) {
+                Some(f) => f.clone(),
+                None => {
+                    return Err(RuntimeError::FunctionDoesNotExistError {
+                        identifier: function_identifier.clone(),
+                    });
+                }
+            };
+
+            // Evaluate arguments
+            let mut function_arguments: Vec<(FullType, Value)> = vec![];
+            for i in 0..arguments.len() {
+                let evaluated_argument = evaluate(
+                    &arguments[i],
+                    symbol_table,
+                    function_table,
+                    return_value_stack,
+                )?;
+                // Type check
+                let farg_type = *function.arguments[i].arg_type.clone();
+                match farg_type == evaluated_argument.0 {
+                    true => {
+                        function_arguments.push(evaluated_argument);
+                    }
+                    false => {
+                        return Err(RuntimeError::FunctionArgumentTypeError {
+                            expected_type: farg_type,
+                            received_type: evaluated_argument.0,
+                        });
+                    }
+                }
+            }
+            if function_arguments.len() != function.arguments.len() {
+                return Err(RuntimeError::FunctionArgumentNumberError {
+                    identifier: function_identifier.clone(),
+                });
+            }
+
+            // Create a new symbol table
+            let mut new_symbol_table = SymbolTable {
+                entries: HashMap::new(),
+                is_function_root: true,
+            };
+            // Add each argument to the symbol table
+            for i in 0..function_arguments.len() {
+                match new_symbol_table.entries.insert(
+                    function.arguments[i].identifier.clone(),
+                    function_arguments[i].clone(),
+                ) {
+                    Some(_) => {
+                        return Err(RuntimeError::FunctionArgumentNumberError {
+                            identifier: function_identifier.clone(),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            // Push new symbol table
+            symbol_table.push(new_symbol_table);
+
+            // Run statements until a Return
+            execute(
+                &function.contents,
+                symbol_table,
+                function_table,
+                return_value_stack,
+            )?;
+
+            // Then, pop the return value stack and return that value
+            return match return_value_stack.pop() {
+                Some(r) => Ok(r),
+                None => Ok((
+                    FullType {
+                        main: Type::Nothing,
+                        subtype: None,
+                    },
+                    Value::Nothing,
+                )),
+            };
         }
     }
 }

@@ -1,0 +1,7 @@
+Function return_one takes (Integer a) returns Integer {
+    Return 1
+}
+
+Create Integer foo with value 3
+
+Display return_one(foo)

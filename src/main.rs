@@ -6,6 +6,7 @@ mod tokens;
 mod ui;
 
 use crate::ast::Statement;
+use crate::runtime::RuntimeError;
 use crate::runtime::SymbolTable;
 use clap::Parser;
 use gtk::Application;
@@ -15,7 +16,6 @@ use lexer::Lexer;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 
 const APP_ID: &str = "com.alex-ha.redox";
@@ -98,9 +98,22 @@ fn main() {
                 };
                 let mut symbol_table_stack = vec![symbol_table];
                 let mut function_table = HashMap::new();
-                match runtime::execute(&good_ast, &mut symbol_table_stack, &mut function_table) {
+                let mut return_value_stack = vec![];
+                match runtime::execute(
+                    &good_ast,
+                    &mut symbol_table_stack,
+                    &mut function_table,
+                    &mut return_value_stack,
+                ) {
                     Ok(_) => {}
-                    Err(e) => panic!("Error when executing program: {:?}", e),
+                    Err(e) => match e {
+                        RuntimeError::ReturnValueNotError { ret_val } => {
+                            println!("Program returned: {:?}", ret_val)
+                        }
+                        _ => {
+                            panic!("Error when executing program: {:?}", e)
+                        }
+                    },
                 }
             }
         }

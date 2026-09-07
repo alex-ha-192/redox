@@ -69,7 +69,7 @@ pub enum Statement {
         contents: Vec<Statement>,
     },
     Return {
-        operand: Option<Box<Expression>>,
+        operand: Box<Expression>,
     },
     Run {
         operand: Box<Expression>,
@@ -82,6 +82,7 @@ pub enum Expression {
     IntegerLiteral(i64),
     RealLiteral(f64),
     TextLiteral(String),
+    NothingLiteral(),
     ListLiteral {
         contents: Vec<Expression>,
     },
