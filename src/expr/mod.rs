@@ -83,7 +83,7 @@ pub fn evaluate<'a>(
             let e = table.entries.get(&name).unwrap(); // We've already confirmed that this exists
 
             Ok((e.0.clone(), e.1.clone()))
-        } // Look up symbol s
+        }
         IntegerLiteral(i) => Ok((
             FullType {
                 main: Type::Integer,
