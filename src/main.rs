@@ -3,22 +3,16 @@ mod expr;
 mod lexer;
 mod runtime;
 mod tokens;
-mod ui;
+// mod ui;
 
 use crate::ast::Statement;
 use crate::runtime::RuntimeError;
 use crate::runtime::SymbolTable;
 use clap::Parser;
-use gtk::Application;
-use gtk::prelude::*;
 use lalrpop_util::lalrpop_mod;
 use lexer::Lexer;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
-use std::rc::Rc;
-
-const APP_ID: &str = "com.alex-ha.redox";
 
 lalrpop_mod!(grammar);
 
@@ -38,7 +32,7 @@ struct Args {
 }
 
 #[derive(Default)]
-struct AstState {
+struct _AstState {
     _ast: Vec<Statement>,
 }
 
@@ -81,15 +75,15 @@ fn main() {
             if false
             /* args.tree */
             {
-                // Visualise AST
-                let ast_state = Rc::new(RefCell::new(AstState {
-                    _ast: good_ast.clone(),
-                }));
-                let app = Application::builder().application_id(APP_ID).build();
-                app.connect_activate(move |app| {
-                    ui::build_ui(app, ast_state.clone());
-                });
-                app.run_with_args::<String>(&[]);
+                // // Visualise AST
+                // let ast_state = Rc::new(RefCell::new(AstState {
+                //     _ast: good_ast.clone(),
+                // }));
+                // let app = Application::builder().application_id(APP_ID).build();
+                // app.connect_activate(move |app| {
+                //     ui::build_ui(app, ast_state.clone());
+                // });
+                // app.run_with_args::<String>(&[]);
             } else {
                 // Execute the program from the AST
                 let symbol_table: SymbolTable = SymbolTable {
