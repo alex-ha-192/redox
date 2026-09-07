@@ -3,9 +3,7 @@ mod expr;
 mod lexer;
 mod runtime;
 mod tokens;
-// mod ui;
 
-use crate::ast::Statement;
 use crate::runtime::RuntimeError;
 use crate::runtime::SymbolTable;
 use clap::Parser;
@@ -26,14 +24,6 @@ struct Args {
     /// Print AST for debugging purposes
     #[arg(long, default_value_t = false)]
     debug: bool,
-    // /// Visualise syntax tree instead of running program
-    // #[arg(short, long, default_value_t = false)]
-    // tree: bool,
-}
-
-#[derive(Default)]
-struct _AstState {
-    _ast: Vec<Statement>,
 }
 
 fn main() {
@@ -72,43 +62,29 @@ fn main() {
             if args.debug {
                 println!("{:?}", good_ast);
             }
-            if false
-            /* args.tree */
-            {
-                // // Visualise AST
-                // let ast_state = Rc::new(RefCell::new(AstState {
-                //     _ast: good_ast.clone(),
-                // }));
-                // let app = Application::builder().application_id(APP_ID).build();
-                // app.connect_activate(move |app| {
-                //     ui::build_ui(app, ast_state.clone());
-                // });
-                // app.run_with_args::<String>(&[]);
-            } else {
-                // Execute the program from the AST
-                let symbol_table: SymbolTable = SymbolTable {
-                    entries: HashMap::new(),
-                    is_function_root: false,
-                };
-                let mut symbol_table_stack = vec![symbol_table];
-                let mut function_table = HashMap::new();
-                let mut return_value_stack = vec![];
-                match runtime::execute(
-                    &good_ast,
-                    &mut symbol_table_stack,
-                    &mut function_table,
-                    &mut return_value_stack,
-                ) {
-                    Ok(_) => {}
-                    Err(e) => match e {
-                        RuntimeError::ReturnValueNotError { ret_val } => {
-                            println!("Program returned: {:?}", ret_val)
-                        }
-                        _ => {
-                            panic!("Error when executing program: {:?}", e)
-                        }
-                    },
-                }
+            // Execute the program from the AST
+            let symbol_table: SymbolTable = SymbolTable {
+                entries: HashMap::new(),
+                is_function_root: false,
+            };
+            let mut symbol_table_stack = vec![symbol_table];
+            let mut function_table = HashMap::new();
+            let mut return_value_stack = vec![];
+            match runtime::execute(
+                &good_ast,
+                &mut symbol_table_stack,
+                &mut function_table,
+                &mut return_value_stack,
+            ) {
+                Ok(_) => {}
+                Err(e) => match e {
+                    RuntimeError::ReturnValueNotError { ret_val } => {
+                        println!("Program returned: {:?}", ret_val)
+                    }
+                    _ => {
+                        panic!("Error when executing program: {:?}", e)
+                    }
+                },
             }
         }
         Err(e) => panic!("Error when constructing AST: {:?}", e),

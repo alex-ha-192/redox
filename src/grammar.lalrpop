@@ -245,6 +245,13 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
+  <lhs:Expression> "Append" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Append,
+      rhs
+    })
+  },
 };
 
 pub Factor: Box<ast::Expression> = {
@@ -271,6 +278,9 @@ pub Term: Box<ast::Expression> = {
   },
   <name:"Identifier"> => {
     Box::new(ast::Expression::Identifier(name))
+  },
+  <val: "BooleanLiteral"> => {
+    Box::new(ast::Expression::BooleanLiteral(val))
   },
   <function_identifier:"Identifier"> "(" <args:Comma<Expression>> ")" => {
     Box::new(ast::Expression::FunctionCall {

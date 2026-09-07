@@ -21,8 +21,8 @@ impl Display for Value {
         match self {
             Value::Integer(i) => write!(f, "{}", i),
             Value::Real(r) => write!(f, "{}", r),
-            Value::Character(c) => write!(f, "{}", c),
-            Value::Text(t) => write!(f, "{}", t),
+            Value::Character(c) => write!(f, "\'{}\'", c),
+            Value::Text(t) => write!(f, "\"{}\"", t),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Nothing => write!(f, "Nothing"),
             Value::List(l) => {
@@ -36,14 +36,37 @@ impl Display for Value {
     }
 }
 
-fn can_coerce_b_to_a(a: FullType, b: FullType) -> bool {
+fn can_coerce_b_to_a(a: &FullType, b: &FullType) -> bool {
     match (a.clone(), b.clone()) {
         (a, b) if (a.main == Type::Real && b.main == Type::Integer) => true,
         (a, b) if (a.main == Type::Text && b.main == Type::Character) => true,
         (a, b) if (a.main == Type::List && b.main == Type::List) => {
-            can_coerce_b_to_a(*a.subtype.unwrap(), *b.subtype.unwrap())
+            can_coerce_b_to_a(&a.subtype.unwrap(), &b.subtype.unwrap())
         }
         _ => a.main == b.main,
+    }
+}
+
+fn coerce_value(value: Value, from: &FullType, to: &FullType) -> Result<Value, RuntimeError> {
+    if from == to {
+        return Ok(value);
+    }
+    match (&to.main, &from.main, value.clone()) {
+        (Type::Real, Type::Integer, Value::Integer(i)) => Ok(Value::Real(i as f64)),
+        (Type::Text, Type::Character, Value::Character(c)) => Ok(Value::Text(c.to_string())),
+        (Type::List, Type::List, Value::List(values)) => {
+            let to_subtype = to.subtype.as_ref().unwrap();
+            let from_subtype = from.subtype.as_ref().unwrap();
+            let coerced = values
+                .into_iter()
+                .map(|value| coerce_value(value, from_subtype, to_subtype))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Value::List(coerced))
+        }
+        _ => Err(RuntimeError::SetVarTypeError {
+            original_value: value.clone(),
+            new_value: value,
+        }),
     }
 }
 
@@ -120,20 +143,29 @@ pub fn execute(
                 value,
             } => match get_symbol_home(identifier.clone(), symbol_table_stack)? {
                 None => {
-                    let new_entry = match &**value {
-                        Some(expr) => (
-                            var_type.clone(),
-                            evaluate(expr, symbol_table_stack, function_table, return_value_stack)?
-                                .1,
-                            None,
-                        ),
-                        None => (var_type.clone(), get_default(var_type), None),
+                    let new_value = match &**value {
+                        Some(expr) => {
+                            let (expression_type, value) = evaluate(
+                                expr,
+                                symbol_table_stack,
+                                function_table,
+                                return_value_stack,
+                            )?;
+                            if !can_coerce_b_to_a(var_type, &expression_type) {
+                                return Err(RuntimeError::SetVarTypeError {
+                                    original_value: value,
+                                    new_value: get_default(var_type),
+                                });
+                            }
+                            coerce_value(value, &expression_type, var_type)?
+                        }
+                        None => get_default(var_type),
                     };
                     symbol_table_stack
                         .last_mut()
                         .unwrap()
                         .entries
-                        .insert(identifier.to_string(), new_entry);
+                        .insert(identifier.to_string(), (var_type.clone(), new_value, None));
                 }
                 Some(_) => {
                     return Err(RuntimeError::RedefineExistingVarError {
@@ -154,8 +186,8 @@ pub fn execute(
                 match get_symbol_home(identifier.clone(), symbol_table_stack)? {
                     Some(st_v) => {
                         match can_coerce_b_to_a(
-                            st_v.1.entries.get(&st_v.0).unwrap().0.clone(),
-                            var_new_val.0.clone(),
+                            &st_v.1.entries.get(&st_v.0).unwrap().0,
+                            &var_new_val.0,
                         ) {
                             true => {
                                 st_v.1.entries.insert(st_v.0.clone(), var_new_val.clone());

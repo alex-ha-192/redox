@@ -1,0 +1,16 @@
+Create Real f1 with value 0
+Create Real f2 with value 1
+Create Real temp
+
+Display f1
+Display f2
+
+Create Integer counter with value 1
+
+While counter < 100 {
+    Set temp to f1
+    Set f1 to f2
+    Set f2 to f1 + temp
+    Display f2
+    Set counter to counter + 1
+}

@@ -1,0 +1,13 @@
+Create List<Integer> a with value [0, 2]
+Create List<Integer> b with value [1, 3]
+
+Set a to a Append b
+
+Display a
+
+Create List<Text> a_t with value ["Hello", "world!"]
+Create List<Text> b_t with value ["from", "SIMPLE"]
+
+Set a_t to a_t Append b_t
+
+Display a_t

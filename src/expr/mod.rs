@@ -112,6 +112,13 @@ pub fn evaluate<'a>(
             },
             Nothing,
         )),
+        BooleanLiteral(b) => Ok((
+            FullType {
+                main: Type::Boolean,
+                subtype: None,
+            },
+            Boolean(*b),
+        )),
         ListLiteral { contents } => {
             let mut values = Vec::new();
             let mut elem_type: Option<FullType> = None;
@@ -145,6 +152,7 @@ pub fn evaluate<'a>(
                 GreaterThan => eval_gt(lhs.1, rhs.1),
                 GreaterEqual => eval_ge(lhs.1, rhs.1),
                 Access => eval_access(lhs.1, rhs.1),
+                Append => eval_append(lhs.1, rhs.1),
             }
         }
         UnaryOperation { operator, operand } => {

@@ -36,6 +36,7 @@ pub enum Operator {
     GreaterThan,
     GreaterEqual,
     Access, // List access is a binary operator of LIST <ACCESS> INDEX
+    Append,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -82,6 +83,7 @@ pub enum Expression {
     IntegerLiteral(i64),
     RealLiteral(f64),
     TextLiteral(String),
+    BooleanLiteral(bool),
     NothingLiteral(),
     ListLiteral {
         contents: Vec<Expression>,
