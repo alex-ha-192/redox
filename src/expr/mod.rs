@@ -33,14 +33,33 @@ pub fn get_default(ft: &FullType) -> Value {
 pub fn get_symbol_home<'a>(
     s: String,
     st_vec: &'a mut [SymbolTable],
-) -> Option<&'a mut SymbolTable> {
-    let (last, rest) = st_vec.split_last_mut()?;
-    match last.entries.get(&s) {
-        Some(_) => Some(last),
-        None => match last.is_function_root {
-            false => get_symbol_home(s, rest),
-            true => None,
-        },
+) -> Result<Option<(String, &'a mut SymbolTable)>, RuntimeError> {
+    let mut current_name = s;
+    let mut idx = st_vec.len();
+    let mut crossed_reference = false;
+    loop {
+        if idx == 0 {
+            return Ok(None);
+        }
+        idx -= 1;
+        let target = match st_vec[idx].entries.get(&current_name) {
+            Some(t) => t.2.clone(),
+            None => {
+                if st_vec[idx].is_function_root && !crossed_reference {
+                    return Ok(None);
+                }
+                continue;
+            }
+        };
+        match target {
+            Some(Identifier(id)) => {
+                current_name = id;
+                idx = st_vec.len();
+                crossed_reference = true;
+            }
+            Some(bx) => return Err(RuntimeError::NonIdentifierPassedByReferenceError { expr: bx }),
+            None => return Ok(Some((current_name, &mut st_vec[idx]))),
+        }
     }
 }
 
@@ -52,30 +71,18 @@ pub fn evaluate<'a>(
 ) -> Result<(FullType, Value), RuntimeError> {
     match expr {
         Identifier(s) => {
-            let last = match symbol_table.last() {
-                Some(l) => l,
-                None => {
+            let (name, table) = match get_symbol_home(s.clone(), symbol_table)? {
+                Some((name, table)) => (name, table),
+                _ => {
                     return Err(RuntimeError::VarDoesNotExistError {
                         identifier: s.clone(),
                     });
                 }
             };
-            match last.entries.get(s) {
-                Some(v) => Ok(v.to_owned()),
-                None => match last.is_function_root {
-                    false => {
-                        let mut popped_st = vec![];
-                        for i in 0..symbol_table.len() - 1 {
-                            // Oh my God this is so inefficient I hate it
-                            popped_st.push(symbol_table[i].clone());
-                        }
-                        evaluate(expr, symbol_table, function_table, return_value_stack)
-                    }
-                    true => Err(VarDoesNotExistError {
-                        identifier: s.clone(),
-                    }),
-                },
-            }
+
+            let e = table.entries.get(&name).unwrap(); // We've already confirmed that this exists
+
+            Ok((e.0.clone(), e.1.clone()))
         } // Look up symbol s
         IntegerLiteral(i) => Ok((
             FullType {
@@ -203,7 +210,23 @@ pub fn evaluate<'a>(
             for i in 0..function_arguments.len() {
                 match new_symbol_table.entries.insert(
                     function.arguments[i].identifier.clone(),
-                    function_arguments[i].clone(),
+                    (
+                        function_arguments[i].0.clone(),
+                        function_arguments[i].1.clone(),
+                        match function.arguments[i].copyof {
+                            false => match arguments[i].clone() {
+                                x @ Identifier(_) => Some(x),
+                                x => {
+                                    return Err(
+                                        RuntimeError::NonIdentifierPassedByReferenceError {
+                                            expr: x,
+                                        },
+                                    );
+                                }
+                            },
+                            true => None,
+                        },
+                    ),
                 ) {
                     Some(_) => {
                         return Err(RuntimeError::FunctionArgumentNumberError {
@@ -217,24 +240,26 @@ pub fn evaluate<'a>(
             symbol_table.push(new_symbol_table);
 
             // Run statements until a Return
-            execute(
+            let exec_result = execute(
                 &function.contents,
                 symbol_table,
                 function_table,
                 return_value_stack,
-            )?;
+            );
 
-            // Then, pop the return value stack and return that value
-            return match return_value_stack.pop() {
-                Some(r) => Ok(r),
-                None => Ok((
+            symbol_table.pop();
+
+            match exec_result {
+                Ok(_) => Ok((
                     FullType {
                         main: Type::Nothing,
                         subtype: None,
                     },
                     Value::Nothing,
                 )),
-            };
+                Err(RuntimeError::ReturnValueNotError { ret_val }) => Ok(ret_val),
+                Err(e) => Err(e),
+            }
         }
     }
 }

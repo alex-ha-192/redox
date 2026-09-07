@@ -62,6 +62,9 @@ pub enum RuntimeError {
     FunctionArgumentNumberError {
         identifier: String,
     },
+    NonIdentifierPassedByReferenceError {
+        expr: Expression,
+    },
 }
 
 pub enum RuntimeSuccess {
@@ -78,7 +81,7 @@ pub struct FunctionAttributes {
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable {
-    pub entries: HashMap<String, (FullType, Value)>,
+    pub entries: HashMap<String, (FullType, Value, Option<Expression>)>,
     pub is_function_root: bool,
 }
 
@@ -94,15 +97,16 @@ pub fn execute(
                 identifier,
                 var_type,
                 value,
-            } => match get_symbol_home(identifier.clone(), symbol_table_stack) {
+            } => match get_symbol_home(identifier.clone(), symbol_table_stack)? {
                 None => {
                     let new_entry = match &**value {
                         Some(expr) => (
                             var_type.clone(),
                             evaluate(expr, symbol_table_stack, function_table, return_value_stack)?
                                 .1,
+                            None,
                         ),
-                        None => (var_type.clone(), get_default(var_type)),
+                        None => (var_type.clone(), get_default(var_type), None),
                     };
                     symbol_table_stack
                         .last_mut()
@@ -117,25 +121,27 @@ pub fn execute(
                 }
             },
             Statement::Set { identifier, value } => {
-                // TODO: Implement non-Copyof variables
                 let var_new_val = evaluate(
                     value,
                     symbol_table_stack,
                     function_table,
                     return_value_stack,
                 )?;
-                match get_symbol_home(identifier.clone(), symbol_table_stack) {
+
+                let var_new_val = (var_new_val.0, var_new_val.1, None);
+
+                match get_symbol_home(identifier.clone(), symbol_table_stack)? {
                     Some(st_v) => {
                         match can_coerce_b_to_a(
-                            st_v.entries.get(identifier).unwrap().0.clone(),
+                            st_v.1.entries.get(&st_v.0).unwrap().0.clone(),
                             var_new_val.0.clone(),
                         ) {
                             true => {
-                                st_v.entries.insert(identifier.clone(), var_new_val.clone());
+                                st_v.1.entries.insert(st_v.0.clone(), var_new_val.clone());
                             }
                             false => {
                                 return Err(RuntimeError::SetVarTypeError {
-                                    original_value: st_v.entries.get(identifier).unwrap().1.clone(),
+                                    original_value: st_v.1.entries.get(&st_v.0).unwrap().1.clone(),
                                     new_value: var_new_val.1,
                                 });
                             }

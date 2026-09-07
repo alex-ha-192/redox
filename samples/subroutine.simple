@@ -1,4 +1,6 @@
 Function AddTwoNumbers takes (Copyof Integer a, Integer b) returns Integer {
+    Set a to 1
+    Set b to 1
     Return 3
 }
 
@@ -6,4 +8,6 @@ Create Integer x with value 5
 Create Integer y with value 7
 
 Run AddTwoNumbers(x, y)
-Display AddTwoNumbers(x, y)
+
+Display x
+Display y
