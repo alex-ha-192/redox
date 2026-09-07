@@ -3,6 +3,7 @@ use crate::{
     expr::{evaluate, get_default, get_symbol_home},
 };
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -13,6 +14,26 @@ pub enum Value {
     Boolean(bool),
     List(Vec<Value>),
     Nothing,
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Integer(i) => write!(f, "{}", i),
+            Value::Real(r) => write!(f, "{}", r),
+            Value::Character(c) => write!(f, "{}", c),
+            Value::Text(t) => write!(f, "{}", t),
+            Value::Boolean(b) => write!(f, "{}", b),
+            Value::Nothing => write!(f, "Nothing"),
+            Value::List(l) => {
+                write!(f, "[")?;
+                for i in 0..l.len() - 1 {
+                    write!(f, "{}, ", l[i])?;
+                }
+                write!(f, "{}]", l[l.len() - 1])
+            }
+        }
+    }
 }
 
 fn can_coerce_b_to_a(a: FullType, b: FullType) -> bool {
@@ -156,7 +177,7 @@ pub fn execute(
             }
             Statement::Display { value } => {
                 println!(
-                    "{:?}",
+                    "{}",
                     evaluate(
                         value,
                         symbol_table_stack,

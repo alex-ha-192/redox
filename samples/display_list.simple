@@ -1,0 +1,7 @@
+Create List<Integer> my_list with value [0, 1, 2, 3]
+
+Display my_list
+
+Create List<List<Integer>> my_list_2 with value [[0, 1, 2], [3, 4, 5, 6]]
+
+Display my_list_2

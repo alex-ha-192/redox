@@ -8,7 +8,6 @@ pub enum LexicalError {
     InvalidToken,
 }
 
-// TODO: Better errors
 impl From<()> for LexicalError {
     fn from(_: ()) -> Self {
         LexicalError::InvalidToken
