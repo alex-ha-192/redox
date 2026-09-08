@@ -1,0 +1,34 @@
+Function BubblePass takes (List<Integer> lst, Integer len) returns List<Integer> {
+    Create List<Integer> result with value []
+    Create Integer carry with value lst[0]
+    Create Integer i with value 0
+    While i < len - 1 {
+        Create Integer nxt_idx with value i + 1
+        Create Integer next with value lst[nxt_idx]
+        If carry > next then {
+            Set result to result Append [next]
+        } otherwise {
+            Set result to result Append [carry]
+            Set carry to next
+        }
+        Set i to i + 1
+    }
+    Set result to result Append [carry]
+    Return result
+}
+
+Function BubbleSort takes (List<Integer> lst, Integer len) returns List<Integer> {
+    Create List<Integer> current with value lst
+    Create Integer pass with value 0
+    While pass < len {
+        Set current to BubblePass(current, len)
+        Set pass to pass + 1
+    }
+    Return current
+}
+
+Create List<Integer> data with value [5, 2, 9, 1, 5, 6]
+Create Integer data_length with value 6
+
+Display data
+Display BubbleSort(data, data_length)

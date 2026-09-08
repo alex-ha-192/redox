@@ -1,0 +1,6 @@
+Create List<Integer> a with value []
+Create List<Integer> b with value [1]
+
+Set a to a Append b
+
+Display a

@@ -573,29 +573,18 @@ pub fn eval_access(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeE
     }
 }
 
-pub fn eval_append(lhs: Value, rhs: Value) -> Result<(FullType, Value), RuntimeError> {
-    match (&lhs, &rhs) {
-        (l1, l2) if infer_type(l1) == infer_type(l2) && infer_type(l1).main == Type::List => {
-            match (l1, l2) {
-                (List(ll1), List(ll2)) => {
-                    let mut llfull = vec![];
-                    for element in ll1 {
-                        llfull.push(element.clone());
-                    }
-                    for element in ll2 {
-                        llfull.push(element.clone());
-                    }
-                    Ok((infer_type(l1), List(llfull)))
-                }
-                _ => {
-                    return Err(RuntimeError::OperatorInputTypeError {
-                        operator: Operator::Append,
-                        values: vec![lhs, rhs],
-                    });
-                }
-            }
+pub fn eval_append(
+    lhs_type: FullType,
+    lhs: Value,
+    rhs: Value,
+) -> Result<(FullType, Value), RuntimeError> {
+    match (lhs, rhs) {
+        (List(mut lhs), List(rhs)) => {
+            lhs.extend(rhs);
+
+            Ok((lhs_type, List(lhs)))
         }
-        _ => Err(OperatorInputTypeError {
+        (lhs, rhs) => Err(RuntimeError::OperatorInputTypeError {
             operator: Operator::Append,
             values: vec![lhs, rhs],
         }),

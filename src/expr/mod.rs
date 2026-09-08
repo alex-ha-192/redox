@@ -54,11 +54,14 @@ pub fn get_symbol_home<'a>(
         match target {
             Some(Identifier(id)) => {
                 current_name = id;
-                idx = st_vec.len();
                 crossed_reference = true;
             }
-            Some(bx) => return Err(RuntimeError::NonIdentifierPassedByReferenceError { expr: bx }),
-            None => return Ok(Some((current_name, &mut st_vec[idx]))),
+            Some(bx) => {
+                return Err(RuntimeError::NonIdentifierPassedByReferenceError { expr: bx });
+            }
+            None => {
+                return Ok(Some((current_name, &mut st_vec[idx])));
+            }
         }
     }
 }
@@ -68,6 +71,7 @@ pub fn evaluate<'a>(
     symbol_table: &'a mut Vec<SymbolTable>,
     function_table: &mut HashMap<String, FunctionAttributes>,
     return_value_stack: &'a mut Vec<(FullType, Value)>,
+    expected_type: Option<&FullType>,
 ) -> Result<(FullType, Value), RuntimeError> {
     match expr {
         Identifier(s) => {
@@ -79,9 +83,7 @@ pub fn evaluate<'a>(
                     });
                 }
             };
-
             let e = table.entries.get(&name).unwrap(); // We've already confirmed that this exists
-
             Ok((e.0.clone(), e.1.clone()))
         }
         IntegerLiteral(i) => Ok((
@@ -123,7 +125,8 @@ pub fn evaluate<'a>(
             let mut values = Vec::new();
             let mut elem_type: Option<FullType> = None;
             for expr in contents {
-                let (t, v) = evaluate(expr, symbol_table, function_table, return_value_stack)?;
+                let (t, v) =
+                    evaluate(expr, symbol_table, function_table, return_value_stack, None)?;
                 if elem_type.is_none() {
                     elem_type = Some(t);
                 }
@@ -131,15 +134,16 @@ pub fn evaluate<'a>(
             }
             let list_type = FullType {
                 main: Type::List,
-                subtype: elem_type.map(Box::new),
+                subtype: elem_type
+                    .or_else(|| expected_type.and_then(|t| t.subtype.as_deref().cloned()))
+                    .map(Box::new),
             };
             Ok((list_type, Value::List(values)))
         }
         BinaryOperation { lhs, operator, rhs } => {
-            let lhs = evaluate(lhs, symbol_table, function_table, return_value_stack)?;
-            let rhs = evaluate(rhs, symbol_table, function_table, return_value_stack)?;
-
-            match operator {
+            let lhs = evaluate(lhs, symbol_table, function_table, return_value_stack, None)?;
+            let rhs = evaluate(rhs, symbol_table, function_table, return_value_stack, None)?;
+            let result = match operator {
                 Add => eval_add(lhs.1, rhs.1),
                 Sub => eval_sub(lhs.1, rhs.1),
                 Mul => eval_mul(lhs.1, rhs.1),
@@ -152,11 +156,18 @@ pub fn evaluate<'a>(
                 GreaterThan => eval_gt(lhs.1, rhs.1),
                 GreaterEqual => eval_ge(lhs.1, rhs.1),
                 Access => eval_access(lhs.1, rhs.1),
-                Append => eval_append(lhs.1, rhs.1),
-            }
+                Append => eval_append(lhs.0, lhs.1, rhs.1),
+            };
+            result
         }
         UnaryOperation { operator, operand } => {
-            let operand = evaluate(operand, symbol_table, function_table, return_value_stack)?;
+            let operand = evaluate(
+                operand,
+                symbol_table,
+                function_table,
+                return_value_stack,
+                None,
+            )?;
             match operator {
                 Add => Ok(operand),
                 Sub => eval_sub(Real(0.0), operand.1),
@@ -179,7 +190,6 @@ pub fn evaluate<'a>(
                     });
                 }
             };
-
             // Evaluate arguments
             let mut function_arguments: Vec<(FullType, Value)> = vec![];
             for i in 0..arguments.len() {
@@ -188,6 +198,7 @@ pub fn evaluate<'a>(
                     symbol_table,
                     function_table,
                     return_value_stack,
+                    None,
                 )?;
                 // Type check
                 let farg_type = *function.arguments[i].arg_type.clone();
@@ -246,7 +257,6 @@ pub fn evaluate<'a>(
             }
             // Push new symbol table
             symbol_table.push(new_symbol_table);
-
             // Run statements until a Return
             let exec_result = execute(
                 &function.contents,
@@ -254,9 +264,7 @@ pub fn evaluate<'a>(
                 function_table,
                 return_value_stack,
             );
-
             symbol_table.pop();
-
             match exec_result {
                 Ok(_) => Ok((
                     FullType {

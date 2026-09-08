@@ -21,28 +21,32 @@ impl Display for Value {
         match self {
             Value::Integer(i) => write!(f, "{}", i),
             Value::Real(r) => write!(f, "{}", r),
-            Value::Character(c) => write!(f, "\'{}\'", c),
+            Value::Character(c) => write!(f, "'{}'", c),
             Value::Text(t) => write!(f, "\"{}\"", t),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Nothing => write!(f, "Nothing"),
             Value::List(l) => {
                 write!(f, "[")?;
-                for i in 0..l.len() - 1 {
-                    write!(f, "{}, ", l[i])?;
+                for (i, value) in l.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", value)?;
                 }
-                write!(f, "{}]", l[l.len() - 1])
+                write!(f, "]")
             }
         }
     }
 }
 
 fn can_coerce_b_to_a(a: &FullType, b: &FullType) -> bool {
-    match (a.clone(), b.clone()) {
-        (a, b) if (a.main == Type::Real && b.main == Type::Integer) => true,
-        (a, b) if (a.main == Type::Text && b.main == Type::Character) => true,
-        (a, b) if (a.main == Type::List && b.main == Type::List) => {
-            can_coerce_b_to_a(&a.subtype.unwrap(), &b.subtype.unwrap())
-        }
+    match (a, b) {
+        (a, b) if a.main == Type::Real && b.main == Type::Integer => true,
+        (a, b) if a.main == Type::Text && b.main == Type::Character => true,
+        (a, b) if a.main == Type::List && b.main == Type::List => match (&a.subtype, &b.subtype) {
+            (Some(a_subtype), Some(b_subtype)) => can_coerce_b_to_a(a_subtype, b_subtype),
+            _ => false,
+        },
         _ => a.main == b.main,
     }
 }
@@ -51,18 +55,24 @@ fn coerce_value(value: Value, from: &FullType, to: &FullType) -> Result<Value, R
     if from == to {
         return Ok(value);
     }
+
     match (&to.main, &from.main, value.clone()) {
         (Type::Real, Type::Integer, Value::Integer(i)) => Ok(Value::Real(i as f64)),
+
         (Type::Text, Type::Character, Value::Character(c)) => Ok(Value::Text(c.to_string())),
+
         (Type::List, Type::List, Value::List(values)) => {
             let to_subtype = to.subtype.as_ref().unwrap();
             let from_subtype = from.subtype.as_ref().unwrap();
+
             let coerced = values
                 .into_iter()
                 .map(|value| coerce_value(value, from_subtype, to_subtype))
                 .collect::<Result<Vec<_>, _>>()?;
+
             Ok(Value::List(coerced))
         }
+
         _ => Err(RuntimeError::SetVarTypeError {
             original_value: value.clone(),
             new_value: value,
@@ -150,6 +160,7 @@ pub fn execute(
                                 symbol_table_stack,
                                 function_table,
                                 return_value_stack,
+                                Some(var_type),
                             )?;
                             if !can_coerce_b_to_a(var_type, &expression_type) {
                                 return Err(RuntimeError::SetVarTypeError {
@@ -179,18 +190,20 @@ pub fn execute(
                     symbol_table_stack,
                     function_table,
                     return_value_stack,
+                    None,
                 )?;
-
-                let var_new_val = (var_new_val.0, var_new_val.1, None);
-
                 match get_symbol_home(identifier.clone(), symbol_table_stack)? {
                     Some(st_v) => {
-                        match can_coerce_b_to_a(
-                            &st_v.1.entries.get(&st_v.0).unwrap().0,
-                            &var_new_val.0,
-                        ) {
+                        let existing_type = st_v.1.entries.get(&st_v.0).unwrap().0.clone();
+
+                        match can_coerce_b_to_a(&existing_type, &var_new_val.0) {
                             true => {
-                                st_v.1.entries.insert(st_v.0.clone(), var_new_val.clone());
+                                let coerced_value =
+                                    coerce_value(var_new_val.1, &var_new_val.0, &existing_type)?;
+
+                                st_v.1
+                                    .entries
+                                    .insert(st_v.0.clone(), (existing_type, coerced_value, None));
                             }
                             false => {
                                 return Err(RuntimeError::SetVarTypeError {
@@ -214,10 +227,11 @@ pub fn execute(
                         value,
                         symbol_table_stack,
                         function_table,
-                        return_value_stack
+                        return_value_stack,
+                        None,
                     )?
                     .1
-                )
+                );
             }
             Statement::If {
                 condition,
@@ -228,6 +242,7 @@ pub fn execute(
                 symbol_table_stack,
                 function_table,
                 return_value_stack,
+                None,
             )? {
                 (
                     FullType {
@@ -240,6 +255,7 @@ pub fn execute(
                         entries: HashMap::new(),
                         is_function_root: false,
                     });
+
                     execute(
                         then_contents,
                         symbol_table_stack,
@@ -285,6 +301,7 @@ pub fn execute(
                     symbol_table_stack,
                     function_table,
                     return_value_stack,
+                    None,
                 )? {
                     (
                         FullType {
@@ -303,6 +320,7 @@ pub fn execute(
                             function_table,
                             return_value_stack,
                         )?;
+
                         symbol_table_stack.pop();
                     }
                     (
@@ -327,7 +345,6 @@ pub fn execute(
                 return_type,
                 contents,
             } => {
-                // Declaring a function, add to global
                 match function_table.insert(
                     name.clone(),
                     FunctionAttributes {
@@ -338,7 +355,6 @@ pub fn execute(
                 ) {
                     None => {}
                     Some(_) => {
-                        // Function already exists
                         return Err(RuntimeError::RedefineFunctionError {
                             identifier: name.clone(),
                         });
@@ -351,10 +367,9 @@ pub fn execute(
                     symbol_table_stack,
                     function_table,
                     return_value_stack,
+                    None,
                 )?;
-
                 return_value_stack.push(ret_val.clone());
-
                 return Err(RuntimeError::ReturnValueNotError { ret_val });
             }
             Statement::Run { operand } => {
@@ -363,6 +378,7 @@ pub fn execute(
                     symbol_table_stack,
                     function_table,
                     return_value_stack,
+                    None,
                 )?;
             }
         }
