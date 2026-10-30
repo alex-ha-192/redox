@@ -15,6 +15,30 @@ pub struct FullType {
     pub subtype: Option<Box<FullType>>,
 }
 
+impl FullType {
+    pub fn new(main: Type) -> Self {
+        Self {
+            main,
+            subtype: None,
+        }
+    }
+
+    pub fn list(subtype: Option<Box<FullType>>) -> Self {
+        Self {
+            main: Type::List,
+            subtype,
+        }
+    }
+
+    pub fn subtype(&self) -> Option<&FullType> {
+        self.subtype.as_deref()
+    }
+
+    pub fn is(&self, main: Type) -> bool {
+        self.main == main && self.subtype.is_none()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionArgument {
     pub copyof: bool,
@@ -37,6 +61,7 @@ pub enum Operator {
     GreaterEqual,
     Access, // List access is a binary operator of LIST <ACCESS> INDEX
     Append,
+    Length, // The number of elements in a List<T>, as an Integer
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -82,6 +107,7 @@ pub enum Expression {
     Identifier(String),
     IntegerLiteral(i64),
     RealLiteral(f64),
+    CharacterLiteral(char),
     TextLiteral(String),
     BooleanLiteral(bool),
     NothingLiteral(),

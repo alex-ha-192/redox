@@ -3,279 +3,265 @@ mod ops;
 use crate::{
     ast::{
         Expression::{self, *},
-        FullType,
-        Operator::*,
-        Type,
+        FullType, Operator, Type,
     },
-    expr::ops::*,
+    expr::ops::{binary_operator, unary_operator},
     runtime::{
-        FunctionAttributes,
-        RuntimeError::{self, *},
-        SymbolTable,
-        Value::{self, *},
-        execute,
+        FunctionAttributes, RuntimeError, SymbolEntry, SymbolTable, TypedValue, Value,
+        can_coerce_to, coerce_value, common_type, execute, get_symbol_home,
     },
 };
 use std::collections::HashMap;
 
-pub fn get_default(ft: &FullType) -> Value {
-    match ft.main {
-        Type::Integer => Integer(0),
-        Type::Real => Real(0.0),
-        Type::Character => Character('a'),
-        Type::Text => Text("".to_string()),
-        Type::Boolean => Boolean(true),
-        Type::List => List(vec![]),
-        Type::Nothing => Nothing,
-    }
-}
-
-pub fn get_symbol_home<'a>(
-    s: String,
-    st_vec: &'a mut [SymbolTable],
-) -> Result<Option<(String, &'a mut SymbolTable)>, RuntimeError> {
-    let mut current_name = s;
-    let mut idx = st_vec.len();
-    let mut crossed_reference = false;
-    loop {
-        if idx == 0 {
-            return Ok(None);
-        }
-        idx -= 1;
-        let target = match st_vec[idx].entries.get(&current_name) {
-            Some(t) => t.2.clone(),
-            None => {
-                if st_vec[idx].is_function_root && !crossed_reference {
-                    return Ok(None);
-                }
-                continue;
-            }
-        };
-        match target {
-            Some(Identifier(id)) => {
-                current_name = id;
-                crossed_reference = true;
-            }
-            Some(bx) => {
-                return Err(RuntimeError::NonIdentifierPassedByReferenceError { expr: bx });
-            }
-            None => {
-                return Ok(Some((current_name, &mut st_vec[idx])));
-            }
-        }
-    }
-}
-
-pub fn evaluate<'a>(
+pub fn evaluate(
     expr: &Expression,
-    symbol_table: &'a mut Vec<SymbolTable>,
+    symbol_table_stack: &mut Vec<SymbolTable>,
     function_table: &mut HashMap<String, FunctionAttributes>,
-    return_value_stack: &'a mut Vec<(FullType, Value)>,
     expected_type: Option<&FullType>,
-) -> Result<(FullType, Value), RuntimeError> {
+) -> Result<TypedValue, RuntimeError> {
     match expr {
-        Identifier(s) => {
-            let (name, table) = match get_symbol_home(s.clone(), symbol_table)? {
-                Some((name, table)) => (name, table),
-                _ => {
-                    return Err(RuntimeError::VarDoesNotExistError {
-                        identifier: s.clone(),
-                    });
-                }
-            };
-            let e = table.entries.get(&name).unwrap(); // We've already confirmed that this exists
-            Ok((e.0.clone(), e.1.clone()))
+        Identifier(identifier) => {
+            let (name, table) = get_symbol_home(identifier.clone(), symbol_table_stack)?.ok_or(
+                RuntimeError::VarDoesNotExistError {
+                    identifier: identifier.clone(),
+                },
+            )?;
+            let entry = table.entries.get(&name).unwrap();
+            Ok((entry.0.clone(), entry.1.clone()))
         }
-        IntegerLiteral(i) => Ok((
-            FullType {
-                main: Type::Integer,
-                subtype: None,
-            },
-            Integer(*i),
-        )),
-        RealLiteral(r) => Ok((
-            FullType {
-                main: Type::Real,
-                subtype: None,
-            },
-            Real(*r),
-        )),
-        TextLiteral(t) => Ok((
-            FullType {
-                main: Type::Text,
-                subtype: None,
-            },
-            Text(t.clone()),
-        )),
-        NothingLiteral() => Ok((
-            FullType {
-                main: Type::Nothing,
-                subtype: None,
-            },
-            Nothing,
-        )),
-        BooleanLiteral(b) => Ok((
-            FullType {
-                main: Type::Boolean,
-                subtype: None,
-            },
-            Boolean(*b),
-        )),
+        IntegerLiteral(integer) => Ok((FullType::new(Type::Integer), Value::Integer(*integer))),
+        RealLiteral(real) => Ok((FullType::new(Type::Real), Value::Real(*real))),
+        CharacterLiteral(character) => {
+            Ok((FullType::new(Type::Character), Value::Character(*character)))
+        }
+        TextLiteral(text) => Ok((FullType::new(Type::Text), Value::Text(text.clone()))),
+        BooleanLiteral(boolean) => Ok((FullType::new(Type::Boolean), Value::Boolean(*boolean))),
+        NothingLiteral() => Ok((FullType::new(Type::Nothing), Value::Nothing)),
         ListLiteral { contents } => {
-            let mut values = Vec::new();
-            let mut elem_type: Option<FullType> = None;
-            for expr in contents {
-                let (t, v) =
-                    evaluate(expr, symbol_table, function_table, return_value_stack, None)?;
-                if elem_type.is_none() {
-                    elem_type = Some(t);
-                }
-                values.push(v);
-            }
-            let list_type = FullType {
-                main: Type::List,
-                subtype: elem_type
-                    .or_else(|| expected_type.and_then(|t| t.subtype.as_deref().cloned()))
-                    .map(Box::new),
-            };
-            Ok((list_type, Value::List(values)))
+            evaluate_list_literal(contents, symbol_table_stack, function_table, expected_type)
         }
         BinaryOperation { lhs, operator, rhs } => {
-            let lhs = evaluate(lhs, symbol_table, function_table, return_value_stack, None)?;
-            let rhs = evaluate(rhs, symbol_table, function_table, return_value_stack, None)?;
-            let result = match operator {
-                Add => eval_add(lhs.1, rhs.1),
-                Sub => eval_sub(lhs.1, rhs.1),
-                Mul => eval_mul(lhs.1, rhs.1),
-                Div => eval_div(lhs.1, rhs.1),
-                Modulo => eval_modulo(lhs.1, rhs.1),
-                Equals => eval_eq(lhs.1, rhs.1),
-                NotEquals => eval_neq(lhs.1, rhs.1),
-                LessThan => eval_lt(lhs.1, rhs.1),
-                LessEqual => eval_le(lhs.1, rhs.1),
-                GreaterThan => eval_gt(lhs.1, rhs.1),
-                GreaterEqual => eval_ge(lhs.1, rhs.1),
-                Access => eval_access(lhs.1, rhs.1),
-                Append => eval_append(lhs.0, lhs.1, rhs.1),
-            };
-            result
+            let lhs = evaluate(lhs, symbol_table_stack, function_table, None)?;
+            // The left operand of `Append` gives a bare `[]` on the right the
+            // element type it needs.
+            let rhs_expected_type = (*operator == Operator::Append).then_some(&lhs.0);
+            let rhs = evaluate(rhs, symbol_table_stack, function_table, rhs_expected_type)?;
+            let implementation =
+                binary_operator(*operator).ok_or(RuntimeError::OperatorInputTypeError {
+                    operator: *operator,
+                    values: vec![lhs.1.clone(), rhs.1.clone()],
+                })?;
+            implementation.evaluate(lhs, rhs)
         }
         UnaryOperation { operator, operand } => {
-            let operand = evaluate(
-                operand,
-                symbol_table,
-                function_table,
-                return_value_stack,
-                None,
-            )?;
-            match operator {
-                Add => Ok(operand),
-                Sub => eval_sub(Real(0.0), operand.1),
-                _ => Err(OperatorInputTypeError {
+            let operand = evaluate(operand, symbol_table_stack, function_table, None)?;
+            let implementation =
+                unary_operator(*operator).ok_or(RuntimeError::OperatorInputTypeError {
                     operator: *operator,
-                    values: vec![operand.1],
-                }),
-            }
+                    values: vec![operand.1.clone()],
+                })?;
+            implementation.evaluate(operand)
         }
         FunctionCall {
             function_identifier,
             arguments,
-        } => {
-            // Get information about function
-            let function = match function_table.get(function_identifier) {
-                Some(f) => f.clone(),
+        } => evaluate_function_call(
+            function_identifier,
+            arguments,
+            symbol_table_stack,
+            function_table,
+        ),
+    }
+}
+
+fn evaluate_list_literal(
+    contents: &[Expression],
+    symbol_table_stack: &mut Vec<SymbolTable>,
+    function_table: &mut HashMap<String, FunctionAttributes>,
+    expected_type: Option<&FullType>,
+) -> Result<TypedValue, RuntimeError> {
+    // The element type of a list literal can be inferred from its contents,
+    // but an expected type (e.g. from `Create List<Integer> a with value []`)
+    // gives empty and nested empty lists a type to work with.
+    let declared_element_type = expected_type
+        .filter(|full_type| full_type.main == Type::List)
+        .and_then(|full_type| full_type.subtype())
+        .cloned();
+
+    // `[]` is not a valid `List<>`: every list value has an element type, and an
+    // empty literal can only get one from its context.
+    if contents.is_empty() && declared_element_type.is_none() {
+        return Err(RuntimeError::UntypedListLiteralError);
+    }
+
+    let mut values: Vec<Value> = Vec::with_capacity(contents.len());
+    let mut element_type: Option<FullType> = None;
+
+    for expression in contents {
+        let (expression_type, value) = evaluate(
+            expression,
+            symbol_table_stack,
+            function_table,
+            declared_element_type.as_ref(),
+        )?;
+
+        let target_type = match &element_type {
+            None => Some(expression_type.clone()),
+            Some(existing) => match common_type(existing, &expression_type) {
+                Some(joined) if &joined == existing => Some(existing.clone()),
+                Some(joined) => {
+                    // Widen the values that have already been collected.
+                    let widened = std::mem::take(&mut values)
+                        .into_iter()
+                        .map(|value| coerce_value(value, existing, &joined))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    values = widened;
+                    Some(joined)
+                }
                 None => {
-                    return Err(RuntimeError::FunctionDoesNotExistError {
-                        identifier: function_identifier.clone(),
+                    return Err(RuntimeError::TypeMismatchError {
+                        expected_type: existing.clone(),
+                        received_type: expression_type,
                     });
                 }
-            };
-            // Evaluate arguments
-            let mut function_arguments: Vec<(FullType, Value)> = vec![];
-            for i in 0..arguments.len() {
-                let evaluated_argument = evaluate(
-                    &arguments[i],
-                    symbol_table,
-                    function_table,
-                    return_value_stack,
-                    None,
-                )?;
-                // Type check
-                let farg_type = *function.arguments[i].arg_type.clone();
-                match farg_type == evaluated_argument.0 {
-                    true => {
-                        function_arguments.push(evaluated_argument);
-                    }
-                    false => {
-                        return Err(RuntimeError::FunctionArgumentTypeError {
-                            expected_type: farg_type,
-                            received_type: evaluated_argument.0,
-                        });
-                    }
-                }
-            }
-            if function_arguments.len() != function.arguments.len() {
-                return Err(RuntimeError::FunctionArgumentNumberError {
-                    identifier: function_identifier.clone(),
+            },
+        }
+        .unwrap();
+
+        values.push(coerce_value(value, &expression_type, &target_type)?);
+        element_type = Some(target_type);
+    }
+
+    let final_element_type = match (declared_element_type, element_type) {
+        (Some(declared), Some(inferred)) => {
+            if !can_coerce_to(&declared, &inferred) {
+                return Err(RuntimeError::TypeMismatchError {
+                    expected_type: declared,
+                    received_type: inferred,
                 });
             }
-
-            // Create a new symbol table
-            let mut new_symbol_table = SymbolTable {
-                entries: HashMap::new(),
-                is_function_root: true,
-            };
-            // Add each argument to the symbol table
-            for i in 0..function_arguments.len() {
-                match new_symbol_table.entries.insert(
-                    function.arguments[i].identifier.clone(),
-                    (
-                        function_arguments[i].0.clone(),
-                        function_arguments[i].1.clone(),
-                        match function.arguments[i].copyof {
-                            false => match arguments[i].clone() {
-                                x @ Identifier(_) => Some(x),
-                                x => {
-                                    return Err(
-                                        RuntimeError::NonIdentifierPassedByReferenceError {
-                                            expr: x,
-                                        },
-                                    );
-                                }
-                            },
-                            true => None,
-                        },
-                    ),
-                ) {
-                    Some(_) => {
-                        return Err(RuntimeError::FunctionArgumentNumberError {
-                            identifier: function_identifier.clone(),
-                        });
-                    }
-                    _ => {}
-                }
+            if declared != inferred {
+                values = values
+                    .into_iter()
+                    .map(|value| coerce_value(value, &inferred, &declared))
+                    .collect::<Result<Vec<_>, _>>()?;
             }
-            // Push new symbol table
-            symbol_table.push(new_symbol_table);
-            // Run statements until a Return
-            let exec_result = execute(
-                &function.contents,
-                symbol_table,
-                function_table,
-                return_value_stack,
-            );
-            symbol_table.pop();
-            match exec_result {
-                Ok(_) => Ok((
-                    FullType {
-                        main: Type::Nothing,
-                        subtype: None,
-                    },
-                    Value::Nothing,
-                )),
-                Err(RuntimeError::ReturnValueNotError { ret_val }) => Ok(ret_val),
-                Err(e) => Err(e),
+            Some(declared)
+        }
+        (Some(declared), None) => Some(declared),
+        (None, inferred) => inferred,
+    };
+
+    Ok((
+        FullType::list(final_element_type.map(Box::new)),
+        Value::List(values),
+    ))
+}
+
+fn evaluate_function_call(
+    function_identifier: &str,
+    arguments: &[Expression],
+    symbol_table_stack: &mut Vec<SymbolTable>,
+    function_table: &mut HashMap<String, FunctionAttributes>,
+) -> Result<TypedValue, RuntimeError> {
+    let function = function_table.get(function_identifier).cloned().ok_or(
+        RuntimeError::FunctionDoesNotExistError {
+            identifier: function_identifier.to_string(),
+        },
+    )?;
+
+    if arguments.len() != function.arguments.len() {
+        return Err(RuntimeError::FunctionArgumentNumberError {
+            identifier: function_identifier.to_string(),
+        });
+    }
+
+    let mut bound_arguments: Vec<SymbolEntry> = Vec::with_capacity(arguments.len());
+    for (argument, parameter) in arguments.iter().zip(function.arguments.iter()) {
+        let parameter_type = (*parameter.arg_type).clone();
+        let (argument_type, value) = evaluate(
+            argument,
+            symbol_table_stack,
+            function_table,
+            Some(&parameter_type),
+        )?;
+
+        if !can_coerce_to(&parameter_type, &argument_type) {
+            return Err(RuntimeError::FunctionArgumentTypeError {
+                expected_type: parameter_type,
+                received_type: argument_type,
+            });
+        }
+
+        // A reference parameter aliases a caller variable, so only an
+        // identifier can name it, and a write through it must store exactly the
+        // declared type in the caller, so it may not be implicitly cast.
+        let reference = match argument {
+            Identifier(identifier) if !parameter.copyof => {
+                if argument_type != parameter_type {
+                    return Err(RuntimeError::FunctionArgumentTypeError {
+                        expected_type: parameter_type.clone(),
+                        received_type: argument_type,
+                    });
+                }
+                Some(Expression::Identifier(identifier.clone()))
+            }
+            // Anything else is a value rather than a caller variable: it is
+            // materialised as a temporary variable, which a reference
+            // parameter can still mutate. The caller sees no change.
+            _ => None,
+        };
+
+        let value = coerce_value(value, &argument_type, &parameter_type)?;
+        bound_arguments.push((parameter_type, value, reference));
+    }
+
+    let mut function_symbols = SymbolTable::new(true);
+    for (parameter, (parameter_type, value, reference)) in
+        function.arguments.iter().zip(bound_arguments)
+    {
+        function_symbols.entries.insert(
+            parameter.identifier.clone(),
+            (parameter_type, value, reference),
+        );
+    }
+
+    let expected_return_type = *function.return_type.clone();
+
+    symbol_table_stack.push(function_symbols);
+    let execution = execute(
+        &function.contents,
+        symbol_table_stack,
+        function_table,
+        Some(&expected_return_type),
+    );
+    symbol_table_stack.pop();
+
+    match execution {
+        Ok(()) => {
+            if expected_return_type.is(Type::Nothing) {
+                Ok((expected_return_type, Value::Nothing))
+            } else {
+                Err(RuntimeError::FunctionDidNotReturnError {
+                    identifier: function_identifier.to_string(),
+                })
             }
         }
+        Err(RuntimeError::ReturnValueNotError {
+            ret_val: (returned_type, returned_value),
+        }) => {
+            if !can_coerce_to(&expected_return_type, &returned_type) {
+                return Err(RuntimeError::FunctionReturnTypeError {
+                    identifier: function_identifier.to_string(),
+                    expected_type: expected_return_type,
+                    received_type: returned_type,
+                });
+            }
+            Ok((
+                expected_return_type.clone(),
+                coerce_value(returned_value, &returned_type, &expected_return_type)?,
+            ))
+        }
+        Err(error) => Err(error),
     }
 }
