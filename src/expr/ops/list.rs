@@ -16,6 +16,12 @@ impl UnaryOperator for LengthOp {
                 FullType::new(Type::Integer),
                 Value::Integer(items.len() as i64),
             )),
+            // `Text` is a `List<Character>` in all but name, so its length is
+            // counted in Unicode scalar values, as indexing is.
+            Value::Text(text) => Ok((
+                FullType::new(Type::Integer),
+                Value::Integer(text.chars().count() as i64),
+            )),
             value => Err(RuntimeError::OperatorInputTypeError {
                 operator: Operator::Length,
                 values: vec![value],

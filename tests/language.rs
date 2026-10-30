@@ -233,8 +233,17 @@ fn length_returns_the_number_of_elements() {
 }
 
 #[test]
-fn length_rejects_non_lists() {
-    assert_error("length_type", "Display Length(\"abc\")\n", "OperatorInputTypeError");
+fn length_works_on_text() {
+    assert_output(
+        "length_text",
+        "Create Text t with value \"hello\"\nDisplay Length(t)\nDisplay Length(\"\")\n",
+        &["5", "0"],
+    );
+}
+
+#[test]
+fn length_rejects_non_sequences() {
+    assert_error("length_type", "Display Length(1)\n", "OperatorInputTypeError");
 }
 
 #[test]
