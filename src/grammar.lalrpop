@@ -28,6 +28,7 @@ extern {
     "=" => Token::Equals,
     "!=" => Token::NotEquals,
     "Append" => Token::Append,
+    "Length" => Token::Length,
     "Integer" => Token::Integer,
     "Real" => Token::Real,
     "Character" => Token::Character,
@@ -51,6 +52,7 @@ extern {
     "otherwise" => Token::Otherwise,
     "While" => Token::While,
     "is" => Token::Is,
+    "Newline" => Token::Newline,
     "IntegerLiteral" => Token::IntegerLiteral(<i64>),
     "RealLiteral" => Token::RealLiteral(<f64>),
     "Identifier" => Token::Identifier(<String>),
@@ -71,8 +73,34 @@ Comma<T>: Vec<T> = {
 
 // ================================================================================================
 
+Newlines: () = {
+  <"Newline"*> => (),
+};
+
+// A statement is followed by at least one newline, which the lexer also
+// supplies before a closing brace and at the end of the file.
+NewlineRun: () = {
+  <"Newline"+> => (),
+};
+
 pub Program: Vec<ast::Statement> = {
-  <stmts:Statement*> => stmts
+  <_newlines:Newlines> <statements:StatementSequence> => statements
+};
+
+StatementSequence: Vec<ast::Statement> = {
+  => Vec::new(),
+  <mut statements:StatementSequence> <statement:Statement> <_newlines:NewlineRun> => {
+    statements.push(statement);
+    statements
+  },
+};
+
+Block: Vec<ast::Statement> = {
+  "{" <_newlines:Newlines> <statements:StatementSequence> "}" => statements,
+};
+
+OtherwiseBlock: Vec<ast::Statement> = {
+  "otherwise" <contents:Block> => contents,
 };
 
 pub Statement: ast::Statement = {
@@ -99,35 +127,30 @@ pub Statement: ast::Statement = {
   "Display" <value:Expression> => {
     ast::Statement::Display { value }
   },
-  "If" <cond:Expression> "{" <then:Statement*> "}" => {
+  // `then` is mandatory; the `otherwise` branch is optional.
+  "If" <cond:Expression> "then" <then:Block> <otherwise:OtherwiseBlock?> => {
     ast::Statement::If {
       condition: cond,
       then_contents: then,
-      otherwise_contents: None,
+      otherwise_contents: otherwise,
     }
   },
-  "If" <cond:Expression> "then" "{" <then:Statement*> "}" "otherwise" "{" <otherwise:Statement*> "}" => {
-    ast::Statement::If {
-      condition: cond,
-      then_contents: then,
-      otherwise_contents: Some(otherwise),
-    }
-  },
-  "While" <cond:Expression> "is" <proceed:"BooleanLiteral"> "{" <then:Statement*> "}" => {
+  // Only the literal `True` or `False` may follow `is`.
+  "While" <cond:Expression> "is" <proceed:"BooleanLiteral"> <then:Block> => {
     ast::Statement::While {
       condition: cond,
       proceed,
       then_contents: then,
     }
   },
-  "While" <cond:Expression> "{" <then:Statement*> "}" => {
+  "While" <cond:Expression> <then:Block> => {
     ast::Statement::While {
       condition: cond,
       proceed: true,
       then_contents: then,
     }
   },
-  "Function" <name:"Identifier"> "takes" "(" <arguments:Comma<FunctionArgument>> ")" "returns" <return_type:FullType> "{" <contents:Statement*> "}" => {
+  "Function" <name:"Identifier"> "takes" "(" <arguments:Comma<FunctionArgument>> ")" "returns" <return_type:FullType> <contents:Block> => {
     ast::Statement::Function {
       name,
       arguments,
@@ -145,9 +168,13 @@ pub Statement: ast::Statement = {
       operand: Box::new(ast::Expression::NothingLiteral()),
     }
   },
-  "Run" <expr:Expression> => {
+  // `Run` runs a function call and discards its result.
+  "Run" <function_identifier:"Identifier"> "(" <args:Comma<Expression>> ")" => {
     ast::Statement::Run {
-      operand: expr
+      operand: Box::new(ast::Expression::FunctionCall {
+        function_identifier,
+        arguments: args.into_iter().map(|e| *e).collect(),
+      }),
     }
   },
 };
@@ -155,14 +182,6 @@ pub Statement: ast::Statement = {
 pub Expression: Box<ast::Expression> = {
   #[precedence(level="1")]
   Factor,
-  #[precedence(level="3")] #[assoc(side="left")]
-  <lhs:Expression> "[" <rhs:Expression> "]" => {
-    Box::new(ast::Expression::BinaryOperation {
-      lhs,
-      operator: ast::Operator::Access,
-      rhs
-    })
-  },
   #[precedence(level="3")] #[assoc(side="left")]
   <lhs:Expression> "*" <rhs:Expression> => {
     Box::new(ast::Expression::BinaryOperation {
@@ -201,8 +220,18 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
-  // Equality and relative operators
+  // `Append` binds tighter than the comparison operators, so that
+  // `a Equals b Append c` is `a Equals (b Append c)`.
   #[precedence(level="5")] #[assoc(side="left")]
+  <lhs:Expression> "Append" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Append,
+      rhs
+    })
+  },
+  // Equality and relative operators
+  #[precedence(level="6")] #[assoc(side="left")]
   <lhs:Expression> "=" <rhs:Expression> => {
     Box::new(ast::Expression::BinaryOperation {
       lhs,
@@ -245,13 +274,6 @@ pub Expression: Box<ast::Expression> = {
       rhs
     })
   },
-  <lhs:Expression> "Append" <rhs:Expression> => {
-    Box::new(ast::Expression::BinaryOperation {
-      lhs,
-      operator: ast::Operator::Append,
-      rhs
-    })
-  },
 };
 
 pub Factor: Box<ast::Expression> = {
@@ -261,6 +283,13 @@ pub Factor: Box<ast::Expression> = {
   "-" <operand:Factor> => {
     Box::new(ast::Expression::UnaryOperation {
       operator: ast::Operator::Sub,
+      operand
+    })
+  },
+  // A numeric literal may be written with a leading sign, e.g. `+1.5`.
+  "+" <operand:Factor> => {
+    Box::new(ast::Expression::UnaryOperation {
+      operator: ast::Operator::Add,
       operand
     })
   },
@@ -276,11 +305,17 @@ pub Term: Box<ast::Expression> = {
   <val:"TextLiteral"> => {
     Box::new(ast::Expression::TextLiteral(val))
   },
+  <val:"CharacterLiteral"> => {
+    Box::new(ast::Expression::CharacterLiteral(val))
+  },
   <name:"Identifier"> => {
     Box::new(ast::Expression::Identifier(name))
   },
   <val: "BooleanLiteral"> => {
     Box::new(ast::Expression::BooleanLiteral(val))
+  },
+  "Nothing" => {
+    Box::new(ast::Expression::NothingLiteral())
   },
   <function_identifier:"Identifier"> "(" <args:Comma<Expression>> ")" => {
     Box::new(ast::Expression::FunctionCall {
@@ -289,7 +324,23 @@ pub Term: Box<ast::Expression> = {
     })
   },
   ListLiteral,
+  // `Length` is a built-in operation, not a function: `Length(a)`.
+  "Length" "(" <operand:Expression> ")" => {
+    Box::new(ast::Expression::UnaryOperation {
+      operator: ast::Operator::Length,
+      operand
+    })
+  },
   "(" <Expression> ")",
+  // List/Text access is postfix, so it binds tighter than unary minus and the
+  // arithmetic operators: `-a[0]` is `-(a[0])`, not `(-a)[0]`.
+  <lhs:Term> "[" <rhs:Expression> "]" => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Access,
+      rhs
+    })
+  },
 };
 
 ListLiteral: Box<ast::Expression> = {
@@ -311,26 +362,26 @@ FunctionArgument: ast::FunctionArgument = {
 };
 
 pub FullType: ast::FullType = {
-  <maintype:Type> => {
+  <maintype:ScalarType> => {
     ast::FullType {
       main: maintype,
       subtype: None
     }
   },
-  <maintype:Type> "<" <subtype:FullType> ">" => {
+  // A `List` always has an element type; there is no bare `List`.
+  "List" "<" <subtype:FullType> ">" => {
     ast::FullType {
-      main: maintype,
+      main: ast::Type::List,
       subtype: Some(Box::new(subtype))
     }
   },
 };
 
-pub Type: ast::Type = {
+ScalarType: ast::Type = {
     "Integer" => ast::Type::Integer,
     "Real" => ast::Type::Real,
     "Character" => ast::Type::Character,
     "Text" => ast::Type::Text,
     "Boolean" => ast::Type::Boolean,
-    "List" => ast::Type::List,
     "Nothing" => ast::Type::Nothing,
 };

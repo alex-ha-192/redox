@@ -11,6 +11,7 @@ use lalrpop_util::lalrpop_mod;
 use lexer::Lexer;
 use std::collections::HashMap;
 use std::fs;
+use std::process::ExitCode;
 
 lalrpop_mod!(grammar);
 
@@ -26,7 +27,7 @@ struct Args {
     debug: bool,
 }
 
-fn main() {
+fn main() -> ExitCode {
     println!(
         "Redox Copyright (C) 2026 Alex Hegedus-Adkin\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.\nFor more details, see the LICENCE file at https://github.com/alex-ha-192/redox/.\n"
     );
@@ -34,59 +35,56 @@ fn main() {
     let args = Args::parse();
 
     let src_path = match fs::canonicalize(match args.input {
-        s if s.len() > 0 => s,
+        s if !s.is_empty() => s,
         _ => {
             let mut buf = String::new();
             println!("Please enter the path to your SIMPLE source file:");
-            match std::io::stdin().read_line(&mut buf) {
-                Ok(_) => buf.trim().to_string(),
-                Err(e) => panic!("Error when reading user input: {:?}", e),
+            if let Err(e) = std::io::stdin().read_line(&mut buf) {
+                eprintln!("Error when reading user input: {e:?}");
+                return ExitCode::FAILURE;
             }
+            buf.trim().to_string()
         }
     }) {
-        Ok(p) => p,
-        Err(e) => panic!("Error reading user input/argument: {:?}", e),
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("Error reading user input/argument: {e:?}");
+            return ExitCode::FAILURE;
+        }
     };
 
     let src_contents = match fs::read_to_string(src_path) {
         Ok(contents) => contents,
-        Err(e) => panic!("Error when reading source file: {:?}", e),
+        Err(e) => {
+            eprintln!("Error when reading source file: {e:?}");
+            return ExitCode::FAILURE;
+        }
     };
 
     let lexer = Lexer::new(&src_contents);
     let parser = grammar::ProgramParser::new();
-    let ast = parser.parse(lexer);
-
-    match &ast {
-        Ok(good_ast) => {
-            if args.debug {
-                println!("{:?}", good_ast);
-            }
-            // Execute the program from the AST
-            let symbol_table: SymbolTable = SymbolTable {
-                entries: HashMap::new(),
-                is_function_root: false,
-            };
-            let mut symbol_table_stack = vec![symbol_table];
-            let mut function_table = HashMap::new();
-            let mut return_value_stack = vec![];
-            match runtime::execute(
-                &good_ast,
-                &mut symbol_table_stack,
-                &mut function_table,
-                &mut return_value_stack,
-            ) {
-                Ok(_) => {}
-                Err(e) => match e {
-                    RuntimeError::ReturnValueNotError { ret_val } => {
-                        println!("Program returned: {:?}", ret_val)
-                    }
-                    _ => {
-                        panic!("Error when executing program: {:?}", e)
-                    }
-                },
-            }
+    let ast = match parser.parse(lexer) {
+        Ok(ast) => ast,
+        Err(e) => {
+            eprintln!("Error when constructing AST: {e:?}");
+            return ExitCode::FAILURE;
         }
-        Err(e) => panic!("Error when constructing AST: {:?}", e),
+    };
+
+    if args.debug {
+        println!("{:?}", ast);
     }
+
+    let mut symbol_table_stack = vec![SymbolTable::new(false)];
+    let mut function_table = HashMap::new();
+    match runtime::execute(&ast, &mut symbol_table_stack, &mut function_table, None) {
+        // A `Return` in `main` is legal, but its value is dropped.
+        Ok(()) | Err(RuntimeError::ReturnValueNotError { .. }) => {}
+        Err(e) => {
+            eprintln!("Error when executing program: {:?}", e);
+            return ExitCode::FAILURE;
+        }
+    }
+
+    ExitCode::SUCCESS
 }
