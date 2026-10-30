@@ -511,3 +511,328 @@ fn list_access_binds_tighter_than_multiplication() {
         &["6", "4", "7", "-2"],
     );
 }
+
+#[test]
+fn statements_run_without_a_trailing_newline() {
+    assert_output("no_trailing_newline", "Display 1", &["1"]);
+}
+
+#[test]
+fn crlf_and_blank_lines_terminate_statements() {
+    assert_output("crlf", "Display 1\r\n\r\nDisplay 2\r\n", &["1", "2"]);
+}
+
+#[test]
+fn while_loops_until_the_condition_is_false() {
+    assert_output(
+        "while_true",
+        "Create Integer i with value 0\n\
+         While i < 3 {\n\
+           Set i to i + 1\n\
+         }\n\
+         Display i\n",
+        &["3"],
+    );
+}
+
+#[test]
+fn while_runs_while_the_condition_is_false_when_asked_to() {
+    assert_output(
+        "while_false",
+        "Create Integer i with value 0\n\
+         While i > 0 is False {\n\
+           Set i to i + 1\n\
+         }\n\
+         Display i\n",
+        &["1"],
+    );
+}
+
+#[test]
+fn while_condition_must_be_a_boolean() {
+    assert_error(
+        "while_non_boolean",
+        "While 1 {\n  Display 1\n}\n",
+        "ConditionalTypeError",
+    );
+}
+
+#[test]
+fn the_is_clause_requires_a_boolean_literal() {
+    assert_parse_error("while_is_literal", "While True is 1 { }\n");
+}
+
+#[test]
+fn if_condition_must_be_a_boolean() {
+    assert_error(
+        "if_non_boolean",
+        "If 1 then {\n  Display 1\n}\n",
+        "ConditionalTypeError",
+    );
+}
+
+#[test]
+fn conditions_may_be_function_calls() {
+    assert_output(
+        "condition_call",
+        "Function is_three takes (Copyof Integer a) returns Boolean {\n\
+           Return a Equals 3\n\
+         }\n\
+         If is_three(3) then {\n\
+           Display \"yes\"\n\
+         }\n",
+        &["yes"],
+    );
+}
+
+#[test]
+fn redefining_a_variable_is_an_error() {
+    assert_error(
+        "redefine_var",
+        "Create Integer a with value 1\nCreate Integer a with value 2\n",
+        "RedefineExistingVarError",
+    );
+}
+
+#[test]
+fn duplicate_functions_are_an_error() {
+    assert_error(
+        "redefine_function",
+        "Function f takes (Copyof Integer a) returns Nothing { }\n\
+         Function f takes (Copyof Integer a) returns Nothing { }\n",
+        "RedefineFunctionError",
+    );
+}
+
+#[test]
+fn duplicate_argument_names_are_an_error() {
+    assert_error(
+        "duplicate_argument",
+        "Function f takes (Copyof Integer a, Copyof Integer a) returns Nothing { }\n",
+        "DuplicateArgumentError",
+    );
+}
+
+#[test]
+fn using_an_undefined_variable_is_an_error() {
+    assert_error("undefined_var", "Display nope\n", "VarDoesNotExistError");
+}
+
+#[test]
+fn calling_an_undefined_function_is_an_error() {
+    assert_error(
+        "undefined_function",
+        "Display nope(1)\n",
+        "FunctionDoesNotExistError",
+    );
+}
+
+#[test]
+fn reference_parameters_mutate_the_callers_variable() {
+    assert_output(
+        "reference_mutation",
+        "Function double takes (Integer a) returns Nothing {\n\
+           Set a to a * 2\n\
+         }\n\
+         Create Integer x with value 3\n\
+         Run double(x)\n\
+         Display x\n",
+        &["6"],
+    );
+}
+
+#[test]
+fn copyof_parameters_leave_the_callers_variable_alone() {
+    assert_output(
+        "copyof_mutation",
+        "Function double takes (Copyof Integer a) returns Nothing {\n\
+           Set a to a * 2\n\
+         }\n\
+         Create Integer x with value 3\n\
+         Run double(x)\n\
+         Display x\n",
+        &["3"],
+    );
+}
+
+#[test]
+fn reference_parameters_can_mutate_lists() {
+    assert_output(
+        "reference_list_mutation",
+        "Function push takes (List<Integer> a) returns Nothing {\n\
+           Set a to a Append 4\n\
+         }\n\
+         Create List<Integer> xs with value [1]\n\
+         Run push(xs)\n\
+         Display xs\n",
+        &["[1, 4]"],
+    );
+}
+
+#[test]
+fn expressions_can_be_passed_to_reference_parameters() {
+    assert_output(
+        "reference_expression",
+        "Function bump takes (Integer a) returns Integer {\n\
+           Set a to a + 1\n\
+           Return a\n\
+         }\n\
+         Create Integer x with value 1\n\
+         Display bump(x + 1)\n\
+         Display x\n",
+        &["3", "1"],
+    );
+}
+
+#[test]
+fn functions_cannot_see_the_callers_locals() {
+    assert_error(
+        "caller_locals",
+        "Function peek takes (Copyof Integer a) returns Integer {\n\
+           Return hidden\n\
+         }\n\
+         Function caller takes (Copyof Integer n) returns Integer {\n\
+           Create Integer hidden with value n\n\
+           Return peek(n)\n\
+         }\n\
+         Display caller(1)\n",
+        "VarDoesNotExistError",
+    );
+}
+
+#[test]
+fn run_discards_the_return_value_but_keeps_side_effects() {
+    assert_output(
+        "run_side_effects",
+        "Function tick takes (Integer counter) returns Integer {\n\
+           Set counter to counter + 1\n\
+           Display \"tick\"\n\
+           Return 99\n\
+         }\n\
+         Create Integer n with value 0\n\
+         Run tick(n)\n\
+         Display n\n",
+        &["tick", "1"],
+    );
+}
+
+#[test]
+fn functions_may_return_nothing_with_a_bare_return() {
+    assert_output(
+        "bare_return_nothing",
+        "Function noop takes (Copyof Integer a) returns Nothing {\n\
+           Return\n\
+         }\n\
+         Run noop(1)\n\
+         Display \"done\"\n",
+        &["done"],
+    );
+}
+
+#[test]
+fn integer_overflow_is_a_runtime_error() {
+    assert_error(
+        "integer_overflow",
+        "Display 9223372036854775807 + 1\n",
+        "IntegerOverflowError",
+    );
+}
+
+#[test]
+fn modulo_works_and_modulo_by_zero_is_a_runtime_error() {
+    assert_output("modulo", "Display 7 Modulo 2\n", &["1"]);
+    assert_error(
+        "modulo_zero",
+        "Display 1 Modulo 0\n",
+        "DivisionByZeroError",
+    );
+}
+
+#[test]
+fn text_access_out_of_bounds_is_a_runtime_error() {
+    assert_error(
+        "text_out_of_bounds",
+        "Create Text t with value \"hi\"\nDisplay t[2]\n",
+        "IndexOutOfBoundsError",
+    );
+}
+
+#[test]
+fn negative_indexes_are_runtime_errors() {
+    assert_error(
+        "negative_index",
+        "Create List<Integer> a with value [1]\nDisplay a[-1]\n",
+        "IndexOutOfBoundsError",
+    );
+}
+
+#[test]
+fn indexing_a_non_list_is_an_error() {
+    assert_error(
+        "index_non_list",
+        "Create Integer a with value 1\nDisplay a[0]\n",
+        "OperatorInputTypeError",
+    );
+}
+
+#[test]
+fn create_without_a_value_uses_the_type_default() {
+    assert_output(
+        "defaults",
+        "Create Integer i\n\
+         Create Real r\n\
+         Create Text t\n\
+         Create Boolean b\n\
+         Create Character c\n\
+         Display i\n\
+         Display r\n\
+         Display t Equals \"\"\n\
+         Display b\n\
+         Display c Equals '\\0'\n",
+        &["0", "0", "True", "False", "True"],
+    );
+}
+
+#[test]
+fn list_declarations_default_to_empty() {
+    assert_output(
+        "list_default",
+        "Create List<Integer> a\nDisplay a\nDisplay Length(a)\n",
+        &["[]", "0"],
+    );
+}
+
+#[test]
+fn list_equality_compares_elements() {
+    assert_output(
+        "list_equality",
+        "Create List<Integer> a with value [1, 2]\n\
+         Create List<Integer> b with value [1, 2]\n\
+         Display a Equals b\n\
+         Display a NotEquals [1, 2, 3]\n",
+        &["True", "True"],
+    );
+}
+
+#[test]
+fn nested_list_types_survive_access() {
+    assert_output(
+        "nested_access_type",
+        "Create List<List<Integer>> a with value [[], [1]]\n\
+         Display Length(a[0])\n\
+         Create List<Integer> inner with value a[1]\n\
+         Display inner\n",
+        &["0", "[1]"],
+    );
+}
+
+#[test]
+fn length_of_a_text_and_a_list_agrees_with_indexing() {
+    assert_output(
+        "length_bounds",
+        "Create Text t with value \"hey\"\n\
+         Display Length(t) - 1\n\
+         Display t[Length(t) - 1]\n",
+        &["2", "'y'"],
+    );
+}

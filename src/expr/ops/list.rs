@@ -225,3 +225,212 @@ impl BinaryOperator for AppendOp {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn int(value: i64) -> TypedValue {
+        (FullType::new(Type::Integer), Value::Integer(value))
+    }
+
+    fn real(value: f64) -> TypedValue {
+        (FullType::new(Type::Real), Value::Real(value))
+    }
+
+    fn character(value: char) -> TypedValue {
+        (FullType::new(Type::Character), Value::Character(value))
+    }
+
+    fn text(value: &str) -> TypedValue {
+        (FullType::new(Type::Text), Value::Text(value.to_string()))
+    }
+
+    fn list_of(element: FullType, items: Vec<Value>) -> TypedValue {
+        (FullType::list(Some(Box::new(element))), Value::List(items))
+    }
+
+    fn integers(items: Vec<i64>) -> TypedValue {
+        list_of(
+            FullType::new(Type::Integer),
+            items.into_iter().map(Value::Integer).collect(),
+        )
+    }
+
+    fn characters(items: Vec<char>) -> TypedValue {
+        list_of(
+            FullType::new(Type::Character),
+            items.into_iter().map(Value::Character).collect(),
+        )
+    }
+
+    #[test]
+    fn length_counts_list_elements() {
+        assert_eq!(LengthOp.evaluate(integers(vec![1, 2])), Ok(int(2)));
+        assert_eq!(LengthOp.evaluate(integers(vec![])), Ok(int(0)));
+        assert_eq!(
+            LengthOp.evaluate(list_of(
+                FullType::list(Some(Box::new(FullType::new(Type::Integer)))),
+                vec![Value::List(vec![]), Value::List(vec![Value::Integer(1)])],
+            )),
+            Ok(int(2))
+        );
+    }
+
+    #[test]
+    fn length_counts_characters_of_text() {
+        assert_eq!(LengthOp.evaluate(text("hi")), Ok(int(2)));
+        assert_eq!(LengthOp.evaluate(text("")), Ok(int(0)));
+        // Characters, not bytes: `é` is two bytes but one character.
+        assert_eq!(LengthOp.evaluate(text("héllo")), Ok(int(5)));
+    }
+
+    #[test]
+    fn length_rejects_other_values() {
+        assert_eq!(
+            LengthOp.evaluate(int(1)),
+            Err(RuntimeError::OperatorInputTypeError {
+                operator: Operator::Length,
+                values: vec![Value::Integer(1)],
+            })
+        );
+    }
+
+    #[test]
+    fn access_reads_lists_and_text() {
+        assert_eq!(AccessOp.evaluate(integers(vec![4, 5]), int(1)), Ok(int(5)));
+        assert_eq!(AccessOp.evaluate(text("hi"), int(0)), Ok(character('h')));
+        assert_eq!(
+            AccessOp.evaluate(characters(vec!['a', 'b']), int(1)),
+            Ok(character('b'))
+        );
+    }
+
+    #[test]
+    fn access_keeps_the_declared_element_type() {
+        let nested = list_of(
+            FullType::list(Some(Box::new(FullType::new(Type::Integer)))),
+            vec![Value::List(vec![])],
+        );
+        assert_eq!(
+            AccessOp.evaluate(nested, int(0)),
+            Ok(list_of(FullType::new(Type::Integer), vec![]))
+        );
+    }
+
+    #[test]
+    fn out_of_range_and_negative_indexes_are_errors() {
+        let values = integers(vec![1]);
+        assert_eq!(
+            AccessOp.evaluate(values.clone(), int(1)),
+            Err(RuntimeError::IndexOutOfBoundsError {
+                index: 1,
+                length: 1
+            })
+        );
+        assert_eq!(
+            AccessOp.evaluate(values, int(-1)),
+            Err(RuntimeError::IndexOutOfBoundsError {
+                index: -1,
+                length: 1
+            })
+        );
+        assert_eq!(
+            AccessOp.evaluate(text("hi"), int(2)),
+            Err(RuntimeError::IndexOutOfBoundsError {
+                index: 2,
+                length: 2
+            })
+        );
+    }
+
+    #[test]
+    fn access_requires_an_integer_index_and_an_indexable_value() {
+        assert_eq!(
+            AccessOp.evaluate(integers(vec![1]), text("0")),
+            Err(RuntimeError::OperatorInputTypeError {
+                operator: Operator::Access,
+                values: vec![Value::List(vec![Value::Integer(1)]), Value::Text("0".to_string())],
+            })
+        );
+        assert_eq!(
+            AccessOp.evaluate(int(1), int(0)),
+            Err(RuntimeError::OperatorInputTypeError {
+                operator: Operator::Access,
+                values: vec![Value::Integer(1), Value::Integer(0)],
+            })
+        );
+        assert_eq!(
+            AccessOp.evaluate(integers(vec![1]), real(0.0)),
+            Err(RuntimeError::OperatorInputTypeError {
+                operator: Operator::Access,
+                values: vec![Value::List(vec![Value::Integer(1)]), Value::Real(0.0)],
+            })
+        );
+    }
+
+    #[test]
+    fn append_concatenates_lists_and_text() {
+        assert_eq!(
+            AppendOp.evaluate(integers(vec![1]), integers(vec![2])),
+            Ok(integers(vec![1, 2]))
+        );
+        assert_eq!(AppendOp.evaluate(text("a"), text("b")), Ok(text("ab")));
+        assert_eq!(
+            AppendOp.evaluate(text(""), text("")),
+            Ok(text(""))
+        );
+    }
+
+    #[test]
+    fn append_adds_a_single_element() {
+        assert_eq!(
+            AppendOp.evaluate(integers(vec![1]), int(2)),
+            Ok(integers(vec![1, 2]))
+        );
+        assert_eq!(
+            AppendOp.evaluate(text("a"), character('b')),
+            Ok(text("ab"))
+        );
+    }
+
+    #[test]
+    fn text_and_character_lists_are_interchangeable_when_appending() {
+        assert_eq!(
+            AppendOp.evaluate(characters(vec!['a']), text("bc")),
+            Ok(characters(vec!['a', 'b', 'c']))
+        );
+        assert_eq!(
+            AppendOp.evaluate(text("hi"), characters(vec!['!'])),
+            Ok(text("hi!"))
+        );
+    }
+
+    #[test]
+    fn appending_widens_numeric_lists() {
+        let reals = list_of(FullType::new(Type::Real), vec![Value::Real(2.5)]);
+        assert_eq!(
+            AppendOp.evaluate(integers(vec![1]), reals),
+            Ok(list_of(
+                FullType::new(Type::Real),
+                vec![Value::Real(1.0), Value::Real(2.5)]
+            ))
+        );
+    }
+
+    #[test]
+    fn append_rejects_incompatible_operands() {
+        assert!(matches!(
+            AppendOp.evaluate(integers(vec![1]), text("a")),
+            Err(RuntimeError::OperatorInputTypeError { .. })
+        ));
+        assert!(matches!(
+            AppendOp.evaluate(int(1), int(2)),
+            Err(RuntimeError::OperatorInputTypeError { .. })
+        ));
+        assert!(matches!(
+            AppendOp.evaluate(text("a"), int(1)),
+            Err(RuntimeError::OperatorInputTypeError { .. })
+        ));
+    }
+}

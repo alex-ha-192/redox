@@ -95,3 +95,193 @@ impl Iterator for Lexer<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tokens::Token;
+
+    fn lex(source: &str) -> Vec<Token> {
+        Lexer::new(source)
+            .map(|token| token.expect("unexpected lexical error").1)
+            .collect()
+    }
+
+    fn lex_error(source: &str) -> LexicalError {
+        Lexer::new(source)
+            .find_map(|token| token.err())
+            .expect("expected a lexical error")
+    }
+
+    #[test]
+    fn a_closing_brace_terminates_the_statement_before_it() {
+        assert_eq!(
+            lex("If True then { Display 1 }"),
+            vec![
+                Token::If,
+                Token::BooleanLiteral(true),
+                Token::Then,
+                Token::LeftBrace,
+                Token::Display,
+                Token::IntegerLiteral(1),
+                Token::Newline,
+                Token::RightBrace,
+                Token::Newline,
+            ]
+        );
+    }
+
+    #[test]
+    fn end_of_file_terminates_a_final_statement() {
+        assert_eq!(
+            lex("Display 1"),
+            vec![Token::Display, Token::IntegerLiteral(1), Token::Newline]
+        );
+        assert_eq!(
+            lex("Display 1\n"),
+            vec![Token::Display, Token::IntegerLiteral(1), Token::Newline]
+        );
+    }
+
+    #[test]
+    fn blank_lines_are_their_own_newline_tokens() {
+        assert_eq!(
+            lex("Display 1\n\nDisplay 2\n"),
+            vec![
+                Token::Display,
+                Token::IntegerLiteral(1),
+                Token::Newline,
+                Token::Newline,
+                Token::Display,
+                Token::IntegerLiteral(2),
+                Token::Newline,
+            ]
+        );
+    }
+
+    #[test]
+    fn every_line_ending_is_a_newline_token() {
+        assert_eq!(
+            lex("Display 1\r\nDisplay 2\rDisplay 3"),
+            vec![
+                Token::Display,
+                Token::IntegerLiteral(1),
+                Token::Newline,
+                Token::Display,
+                Token::IntegerLiteral(2),
+                Token::Newline,
+                Token::Display,
+                Token::IntegerLiteral(3),
+                Token::Newline,
+            ]
+        );
+    }
+
+    #[test]
+    fn horizontal_whitespace_is_ignored() {
+        assert_eq!(
+            lex("\t Display   1 \x0C"),
+            vec![Token::Display, Token::IntegerLiteral(1), Token::Newline]
+        );
+    }
+
+    #[test]
+    fn text_literals_decode_escapes() {
+        assert_eq!(
+            lex(r#"Display "a\tb\nc\\d\"e\'f\rg\0h""#),
+            vec![
+                Token::Display,
+                Token::TextLiteral("a\tb\nc\\d\"e'f\rg\0h".to_string()),
+                Token::Newline,
+            ]
+        );
+        assert_eq!(
+            lex("Display \"\""),
+            vec![
+                Token::Display,
+                Token::TextLiteral(String::new()),
+                Token::Newline,
+            ]
+        );
+    }
+
+    #[test]
+    fn character_literals_decode_escapes() {
+        assert_eq!(
+            lex(r"'\\'"),
+            vec![Token::CharacterLiteral('\\'), Token::Newline]
+        );
+        assert_eq!(
+            lex(r"'\''"),
+            vec![Token::CharacterLiteral('\''), Token::Newline]
+        );
+        assert_eq!(
+            lex(r"'\n'"),
+            vec![Token::CharacterLiteral('\n'), Token::Newline]
+        );
+        assert_eq!(
+            lex("'é'"),
+            vec![Token::CharacterLiteral('é'), Token::Newline]
+        );
+    }
+
+    #[test]
+    fn invalid_escapes_are_rejected() {
+        assert_eq!(lex_error(r#""\q""#), LexicalError::InvalidToken);
+        assert_eq!(lex_error(r"'\q'"), LexicalError::InvalidToken);
+    }
+
+    #[test]
+    fn raw_line_breaks_inside_literals_are_rejected() {
+        assert_eq!(lex_error("\"a\nb\""), LexicalError::InvalidToken);
+        assert_eq!(lex_error("'a"), LexicalError::InvalidToken);
+    }
+
+    #[test]
+    fn a_character_literal_holds_exactly_one_character() {
+        assert_eq!(lex_error("'ab'"), LexicalError::InvalidToken);
+    }
+
+    #[test]
+    fn integer_literals_must_fit_in_64_bits() {
+        assert_eq!(
+            lex_error("9223372036854775808"),
+            LexicalError::IntegerLiteralOutOfRange("9223372036854775808".to_string())
+        );
+        assert_eq!(
+            lex("9223372036854775807"),
+            vec![
+                Token::IntegerLiteral(i64::MAX),
+                Token::Newline,
+            ]
+        );
+    }
+
+    #[test]
+    fn real_literals_accept_a_leading_or_trailing_decimal_point() {
+        assert_eq!(lex("1.5"), vec![Token::RealLiteral(1.5), Token::Newline]);
+        assert_eq!(lex("1."), vec![Token::RealLiteral(1.0), Token::Newline]);
+        assert_eq!(lex(".5"), vec![Token::RealLiteral(0.5), Token::Newline]);
+    }
+
+    #[test]
+    fn a_sign_is_not_part_of_a_numeric_literal() {
+        assert_eq!(
+            lex("-1"),
+            vec![Token::Subtract, Token::IntegerLiteral(1), Token::Newline]
+        );
+        assert_eq!(
+            lex("+1.5"),
+            vec![Token::Add, Token::RealLiteral(1.5), Token::Newline]
+        );
+    }
+
+    #[test]
+    fn keywords_are_not_prefixes_of_identifiers() {
+        assert_eq!(
+            lex("Lengthy"),
+            vec![Token::Identifier("Lengthy".to_string()), Token::Newline]
+        );
+        assert_eq!(lex("Length"), vec![Token::Length, Token::Newline]);
+    }
+}

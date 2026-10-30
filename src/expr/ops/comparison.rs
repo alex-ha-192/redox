@@ -143,3 +143,114 @@ impl BinaryOperator for NotEqualsOp {
         evaluate_equality(Operator::NotEquals, true, lhs, rhs)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn int(value: i64) -> TypedValue {
+        (FullType::new(Type::Integer), Value::Integer(value))
+    }
+
+    fn real(value: f64) -> TypedValue {
+        (FullType::new(Type::Real), Value::Real(value))
+    }
+
+    fn boolean(value: bool) -> TypedValue {
+        (FullType::new(Type::Boolean), Value::Boolean(value))
+    }
+
+    fn text(value: &str) -> TypedValue {
+        (FullType::new(Type::Text), Value::Text(value.to_string()))
+    }
+
+    fn list(items: Vec<Value>) -> TypedValue {
+        (FullType::list(None), Value::List(items))
+    }
+
+    #[test]
+    fn equality_compares_across_integer_and_real() {
+        assert_eq!(EqualsOp.evaluate(int(1), int(1)), Ok(boolean(true)));
+        assert_eq!(EqualsOp.evaluate(int(1), real(1.0)), Ok(boolean(true)));
+        assert_eq!(EqualsOp.evaluate(real(1.5), int(1)), Ok(boolean(false)));
+        assert_eq!(NotEqualsOp.evaluate(real(1.5), int(1)), Ok(boolean(true)));
+        assert_eq!(NotEqualsOp.evaluate(int(1), int(1)), Ok(boolean(false)));
+    }
+
+    #[test]
+    fn equality_compares_lists_elementwise() {
+        let one = || list(vec![Value::Integer(1)]);
+        let two = || list(vec![Value::Integer(2)]);
+
+        assert_eq!(EqualsOp.evaluate(one(), one()), Ok(boolean(true)));
+        assert_eq!(EqualsOp.evaluate(one(), two()), Ok(boolean(false)));
+        assert_eq!(
+            EqualsOp.evaluate(one(), list(vec![Value::Integer(1), Value::Integer(1)])),
+            Ok(boolean(false))
+        );
+
+        let nested = |inner: i64| list(vec![Value::List(vec![Value::Integer(inner)])]);
+        assert_eq!(EqualsOp.evaluate(nested(1), nested(1)), Ok(boolean(true)));
+        assert_eq!(EqualsOp.evaluate(nested(1), nested(2)), Ok(boolean(false)));
+    }
+
+    #[test]
+    fn equality_has_meaning_for_text_characters_booleans_and_nothing() {
+        assert_eq!(EqualsOp.evaluate(text("a"), text("a")), Ok(boolean(true)));
+        assert_eq!(EqualsOp.evaluate(text("a"), text("b")), Ok(boolean(false)));
+        assert_eq!(
+            EqualsOp.evaluate(
+                (FullType::new(Type::Character), Value::Character('a')),
+                (FullType::new(Type::Character), Value::Character('b'))
+            ),
+            Ok(boolean(false))
+        );
+        assert_eq!(
+            EqualsOp.evaluate(boolean(true), boolean(true)),
+            Ok(boolean(true))
+        );
+
+        let nothing = || (FullType::new(Type::Nothing), Value::Nothing);
+        assert_eq!(EqualsOp.evaluate(nothing(), nothing()), Ok(boolean(true)));
+    }
+
+    #[test]
+    fn comparing_unrelated_types_is_an_error() {
+        assert_eq!(
+            EqualsOp.evaluate(text("a"), int(1)),
+            Err(RuntimeError::OperatorInputTypeError {
+                operator: Operator::Equals,
+                values: vec![Value::Text("a".to_string()), Value::Integer(1)],
+            })
+        );
+        assert_eq!(
+            EqualsOp.evaluate(
+                list(vec![Value::Integer(1)]),
+                list(vec![Value::Text("a".to_string())])
+            ),
+            Err(RuntimeError::OperatorInputTypeError {
+                operator: Operator::Equals,
+                values: vec![
+                    Value::List(vec![Value::Integer(1)]),
+                    Value::List(vec![Value::Text("a".to_string())]),
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn ordering_requires_numbers() {
+        assert_eq!(LessThanOp.evaluate(int(1), int(2)), Ok(boolean(true)));
+        assert_eq!(LessThanOp.evaluate(int(2), real(1.5)), Ok(boolean(false)));
+        assert_eq!(LessEqualOp.evaluate(real(2.0), int(2)), Ok(boolean(true)));
+        assert_eq!(GreaterThanOp.evaluate(int(3), real(2.5)), Ok(boolean(true)));
+        assert_eq!(
+            GreaterEqualOp.evaluate(int(1), int(2)),
+            Ok(boolean(false))
+        );
+        assert!(matches!(
+            LessThanOp.evaluate(text("a"), text("b")),
+            Err(RuntimeError::OperatorInputTypeError { .. })
+        ));
+    }
+}

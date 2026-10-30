@@ -128,3 +128,52 @@ pub enum Expression {
         arguments: Vec<Expression>,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_types_carry_their_element_type() {
+        let element = FullType::new(Type::Integer);
+        let list = FullType::list(Some(Box::new(element.clone())));
+
+        assert_eq!(list.main, Type::List);
+        assert_eq!(list.subtype(), Some(&element));
+        // `is` only matches types with no element type, so that a `List` is
+        // never mistaken for its element.
+        assert!(!list.is(Type::List));
+        assert!(!list.is(Type::Integer));
+        assert!(element.is(Type::Integer));
+    }
+
+    #[test]
+    fn a_list_without_an_element_type_is_not_a_list_type() {
+        // Only the interpreter builds these, to describe an empty literal that
+        // has no context yet; the parser never produces a bare `List`.
+        let bare = FullType::list(None);
+        assert_eq!(bare.subtype(), None);
+        assert!(bare.is(Type::List));
+    }
+
+    #[test]
+    fn full_types_compare_structurally() {
+        let nested = FullType::list(Some(Box::new(FullType::list(Some(Box::new(
+            FullType::new(Type::Real),
+        ))))));
+        assert_eq!(
+            nested,
+            FullType {
+                main: Type::List,
+                subtype: Some(Box::new(FullType {
+                    main: Type::List,
+                    subtype: Some(Box::new(FullType {
+                        main: Type::Real,
+                        subtype: None,
+                    })),
+                })),
+            }
+        );
+        assert_ne!(nested.subtype(), Some(&FullType::new(Type::List)));
+    }
+}

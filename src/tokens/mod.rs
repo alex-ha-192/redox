@@ -175,3 +175,28 @@ impl fmt::Display for Token {
         write!(f, "{:?}", self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unescape_decodes_the_permitted_sequences() {
+        assert_eq!(unescape(r"\\"), Some("\\".to_string()));
+        assert_eq!(unescape(r"\'"), Some("'".to_string()));
+        assert_eq!(unescape(r#"\""#), Some("\"".to_string()));
+        assert_eq!(unescape(r"\n"), Some("\n".to_string()));
+        assert_eq!(unescape(r"\r"), Some("\r".to_string()));
+        assert_eq!(unescape(r"\t"), Some("\t".to_string()));
+        assert_eq!(unescape(r"\0"), Some("\0".to_string()));
+        assert_eq!(unescape("plain"), Some("plain".to_string()));
+        assert_eq!(unescape(""), Some(String::new()));
+    }
+
+    #[test]
+    fn unescape_rejects_unknown_and_dangling_escapes() {
+        assert_eq!(unescape(r"\q"), None);
+        assert_eq!(unescape("trailing\\"), None);
+        assert_eq!(unescape(r"\\\q"), None);
+    }
+}

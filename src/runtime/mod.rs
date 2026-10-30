@@ -550,3 +550,177 @@ fn execute_scoped(
     symbol_table_stack.pop();
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn int() -> FullType {
+        FullType::new(Type::Integer)
+    }
+
+    fn real() -> FullType {
+        FullType::new(Type::Real)
+    }
+
+    fn text() -> FullType {
+        FullType::new(Type::Text)
+    }
+
+    fn character() -> FullType {
+        FullType::new(Type::Character)
+    }
+
+    fn boolean() -> FullType {
+        FullType::new(Type::Boolean)
+    }
+
+    fn list(element: FullType) -> FullType {
+        FullType::list(Some(Box::new(element)))
+    }
+
+    #[test]
+    fn integer_widens_to_real_but_not_the_reverse() {
+        assert!(can_coerce_to(&real(), &int()));
+        assert!(!can_coerce_to(&int(), &real()));
+        assert!(can_coerce_to(&int(), &int()));
+        assert!(can_coerce_to(&text(), &text()));
+    }
+
+    #[test]
+    fn character_and_text_interconvert() {
+        assert!(can_coerce_to(&text(), &character()));
+        assert!(can_coerce_to(&text(), &list(character())));
+        assert!(can_coerce_to(&list(character()), &text()));
+        assert!(!can_coerce_to(&text(), &list(int())));
+        assert!(!can_coerce_to(&character(), &text()));
+    }
+
+    #[test]
+    fn a_scalar_can_be_viewed_as_a_one_item_list() {
+        assert!(can_coerce_to(&list(int()), &int()));
+        assert!(can_coerce_to(&list(text()), &text()));
+        assert!(!can_coerce_to(&list(int()), &text()));
+        assert!(can_coerce_to(&list(real()), &list(int())));
+        assert!(!can_coerce_to(&list(int()), &list(real())));
+    }
+
+    #[test]
+    fn nothing_does_not_coerce_in_either_direction() {
+        let nothing = FullType::new(Type::Nothing);
+        assert!(!can_coerce_to(&int(), &nothing));
+        assert!(!can_coerce_to(&nothing, &int()));
+        assert!(can_coerce_to(&nothing, &nothing));
+    }
+
+    #[test]
+    fn common_type_widens_towards_the_more_specific_type() {
+        assert_eq!(common_type(&int(), &real()), Some(real()));
+        assert_eq!(common_type(&real(), &int()), Some(real()));
+        assert_eq!(common_type(&list(int()), &list(real())), Some(list(real())));
+        assert_eq!(common_type(&real(), &text()), None);
+        assert_eq!(common_type(&int(), &boolean()), None);
+    }
+
+    #[test]
+    fn coercion_converts_values() {
+        assert_eq!(
+            coerce_value(Value::Integer(3), &int(), &real()),
+            Ok(Value::Real(3.0))
+        );
+        assert_eq!(
+            coerce_value(Value::Character('x'), &character(), &text()),
+            Ok(Value::Text("x".to_string()))
+        );
+        assert_eq!(
+            coerce_value(
+                Value::List(vec![Value::Character('h'), Value::Character('i')]),
+                &list(character()),
+                &text()
+            ),
+            Ok(Value::Text("hi".to_string()))
+        );
+        assert_eq!(
+            coerce_value(Value::Text("hi".to_string()), &text(), &list(character())),
+            Ok(Value::List(vec![
+                Value::Character('h'),
+                Value::Character('i')
+            ]))
+        );
+        assert_eq!(
+            coerce_value(
+                Value::List(vec![Value::Integer(1), Value::Integer(2)]),
+                &list(int()),
+                &list(real())
+            ),
+            Ok(Value::List(vec![Value::Real(1.0), Value::Real(2.0)]))
+        );
+        assert_eq!(
+            coerce_value(Value::Integer(1), &int(), &list(int())),
+            Ok(Value::List(vec![Value::Integer(1)]))
+        );
+    }
+
+    #[test]
+    fn coercion_refuses_impossible_casts() {
+        assert_eq!(
+            coerce_value(Value::Real(1.5), &real(), &int()),
+            Err(RuntimeError::TypeMismatchError {
+                expected_type: int(),
+                received_type: real(),
+            })
+        );
+        assert_eq!(
+            coerce_value(Value::Text("a".to_string()), &text(), &character()),
+            Err(RuntimeError::TypeMismatchError {
+                expected_type: character(),
+                received_type: text(),
+            })
+        );
+    }
+
+    #[test]
+    fn defaults_depend_on_the_declared_type() {
+        assert_eq!(get_default(&int()), Value::Integer(0));
+        assert_eq!(get_default(&real()), Value::Real(0.0));
+        assert_eq!(get_default(&boolean()), Value::Boolean(false));
+        assert_eq!(get_default(&text()), Value::Text(String::new()));
+        assert_eq!(get_default(&character()), Value::Character('\0'));
+        assert_eq!(get_default(&list(int())), Value::List(Vec::new()));
+        assert_eq!(get_default(&FullType::new(Type::Nothing)), Value::Nothing);
+    }
+
+    #[test]
+    fn values_display_as_the_specification_says() {
+        assert_eq!(Value::Integer(-7).to_string(), "-7");
+        assert_eq!(Value::Real(2.5).to_string(), "2.5");
+        assert_eq!(Value::Character('c').to_string(), "'c'");
+        assert_eq!(Value::Text("Hi".to_string()).to_string(), "Hi");
+        assert_eq!(Value::Boolean(true).to_string(), "True");
+        assert_eq!(Value::Nothing.to_string(), "Nothing");
+        assert_eq!(
+            Value::List(vec![Value::Character('h'), Value::Character('i')]).to_string(),
+            "['h', 'i']"
+        );
+        assert_eq!(
+            Value::List(vec![Value::Text("Hi".to_string())]).to_string(),
+            "[Hi]"
+        );
+        assert_eq!(Value::List(Vec::new()).to_string(), "[]");
+    }
+
+    #[test]
+    fn a_values_type_is_the_narrowest_that_describes_it() {
+        assert_eq!(
+            Value::List(vec![Value::Integer(1), Value::Integer(2)]).full_type(),
+            list(int())
+        );
+        assert_eq!(
+            Value::List(vec![Value::Integer(1), Value::Real(2.5)]).full_type(),
+            list(real())
+        );
+        assert_eq!(Value::List(Vec::new()).full_type(), FullType::list(None));
+        assert_eq!(Value::Text("hi".to_string()).full_type(), text());
+        assert_eq!(Value::Nothing.full_type(), FullType::new(Type::Nothing));
+    }
+}

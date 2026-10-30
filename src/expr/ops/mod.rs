@@ -56,3 +56,50 @@ pub fn unary_operator(operator: Operator) -> Option<&'static dyn UnaryOperator> 
         .copied()
         .find(|implementation| implementation.operator() == operator)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Operator::{self, *};
+
+    const BINARY: [Operator; 13] = [
+        Add, Sub, Mul, Div, Modulo, Equals, NotEquals, LessThan, LessEqual, GreaterThan,
+        GreaterEqual, Access, Append,
+    ];
+
+    const UNARY: [Operator; 3] = [Add, Sub, Length];
+
+    #[test]
+    fn every_binary_operator_has_an_implementation() {
+        for operator in BINARY {
+            assert!(
+                binary_operator(operator).is_some(),
+                "{operator:?} has no implementation"
+            );
+        }
+        assert!(binary_operator(Length).is_none());
+    }
+
+    #[test]
+    fn every_unary_operator_has_an_implementation() {
+        for operator in UNARY {
+            assert!(
+                unary_operator(operator).is_some(),
+                "{operator:?} has no implementation"
+            );
+        }
+        for operator in [Mul, Div, Modulo, Equals, Append, Access] {
+            assert!(unary_operator(operator).is_none());
+        }
+    }
+
+    #[test]
+    fn lookups_return_the_operator_that_was_asked_for() {
+        for operator in BINARY {
+            assert_eq!(binary_operator(operator).unwrap().operator(), operator);
+        }
+        for operator in UNARY {
+            assert_eq!(unary_operator(operator).unwrap().operator(), operator);
+        }
+    }
+}
